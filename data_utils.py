@@ -6,7 +6,7 @@ from sklearn.model_selection import TimeSeriesSplit
 from datetime import datetime
 
 def kdd99(seq_length, seq_step, num_signals):
-    train = np.load('./data/kdd99_train.npy')
+    train = np.load('data/kdd99_train.npy')
     print('load kdd99_train from .npy')
     m, n = train.shape  # m=562387, n=35
     # normalization
@@ -61,7 +61,7 @@ def kdd99(seq_length, seq_step, num_signals):
 
 
 def kdd99_test(seq_length, seq_step, num_signals):
-    test = np.load('./data/kdd99_test.npy')
+    test = np.load('data/kdd99_test.npy')
     print('load kdd99_test from .npy')
 
     m, n = test.shape  # m1=494021, n1=35
@@ -137,7 +137,7 @@ def load_kdd99(seq_length, seq_stride, num_generated_features, batch_size):
 
 
 def load_financial(batch_size):
-    normalised_data = pd.read_csv("./data/normalised_result.csv")
+    normalised_data = pd.read_csv("data/normalised_result.csv")
 
     # Date = How many days since 2008-09-02?
     # Date encoding this is a fairly slow transformation and you need let it run for a while
