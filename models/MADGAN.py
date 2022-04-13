@@ -1,23 +1,8 @@
-import numpy as np
 import torch
 from torch import nn
-import random
 from pathlib import Path
 from typing import Optional, Union
-
-
-def set_seed(seed: int = 0) -> None:
-    torch.manual_seed(seed)
-    np.random.seed(seed)
-    random.seed(seed)
-
-# --- sample Z from latent space --- #
-def sample_Z(batch_size, seq_length, latent_dim, use_time=False, use_noisy_time=False):
-    sample = np.float32(np.random.normal(size=[batch_size, seq_length, latent_dim]))
-    if use_time:
-        print('WARNING: use_time has different semantics')
-        sample[:, :, 0] = np.linspace(0, 1.0 / seq_length, num=seq_length)
-    return torch.Tensor(sample)
+import torch.nn.functional as F
 
 
 class Generator(nn.Module):
@@ -121,3 +106,66 @@ class Discriminator(nn.Module):
         model.load_state_dict(chkp.pop("weights"))
         model.eval()
         return model
+
+
+class AnomalyDetector(object):
+
+    def __init__(self,
+                 *,
+                 discriminator: nn.Module,
+                 generator: nn.Module,
+                 latent_space_dim: int,
+                 res_weight: float = .2,
+                 anomaly_threshold: float = 1.0) -> None:
+        self.discriminator = discriminator.to('cpu')
+        self.generator = generator.to('cpu')
+        self.threshold = anomaly_threshold
+        self.latent_space_dim = latent_space_dim
+        self.res_weight = res_weight
+
+    def predict(self, tensor: torch.Tensor) -> torch.Tensor:
+        return (self.predict_proba(tensor) > self.threshold).int()
+
+    def predict_proba(self, tensor: torch.Tensor) -> torch.Tensor:
+        discriminator_score = self.compute_anomaly_score(tensor)
+        discriminator_score *= 1 - self.res_weight
+        reconstruction_loss = self.compute_reconstruction_loss(tensor)
+        reconstruction_loss *= self.res_weight
+        return discriminator_score #+ reconstruction_loss
+
+    def compute_anomaly_score(self, tensor: torch.Tensor) -> torch.Tensor:
+        with torch.no_grad():
+            discriminator_score = self.discriminator(tensor)
+        return discriminator_score
+
+    def compute_reconstruction_loss(self,
+                                    tensor: torch.Tensor) -> torch.Tensor:
+        best_reconstruct = self._generate_best_reconstruction(tensor)
+        return (best_reconstruct - tensor).abs().sum(dim=(1, 2))
+
+    def _generate_best_reconstruction(self, tensor: torch.Tensor) -> None:
+        # The goal of this function is to find the corresponding latent space for the given
+        # input and then generate the best possible reconstruction.
+        max_iters = 10
+
+        Z = torch.empty(
+            (tensor.size(0), tensor.size(1), self.latent_space_dim),
+            requires_grad=True)
+        nn.init.normal_(Z, std=0.05)
+
+        optimizer = torch.optim.RMSprop(params=[Z], lr=0.1)
+        loss_fn = nn.MSELoss(reduction="none")
+        normalized_target = F.normalize(tensor, dim=1, p=2)
+
+        for _ in range(max_iters):
+            optimizer.zero_grad()
+            generated_samples = self.generator(Z)
+            normalized_input = F.normalize(generated_samples, dim=1, p=2)
+            reconstruction_error = loss_fn(normalized_input,
+                                           normalized_target).sum(dim=(0, 1, 2))
+            reconstruction_error.backward()
+            optimizer.step()
+
+        with torch.no_grad():
+            best_reconstruct = self.generator(Z)
+        return best_reconstruct

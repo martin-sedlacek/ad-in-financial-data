@@ -1,17 +1,8 @@
-from utils import eval
+from utils import evaluation
 
 
 class BaseTrainingPipeline():
-    '''def __init__(self, model, optimizer, loss, train_dl, test_dl, num_epochs):
-        self.model = model
-        self.optimizer = optimizer
-        self.loss = loss
-        self.train_dl = train_dl
-        self.test_dl = test_dl
-        self.num_epochs = num_epochs'''
-
-    @staticmethod
-    def train_epoch(model, loss_fn, optimizer, train_dl):
+    def train_epoch(self, model, loss_fn, optimizer, train_dl):
         loss_sum = 0.0
         ctr = 0
         for x_batch, y_batch, next_batch in train_dl:
@@ -41,7 +32,7 @@ class BaseTrainingPipeline():
             pred = model(X).detach()
             anomaly_predict = Y.squeeze() #torch.tensor(anomaly_detector(pred.numpy(), P.numpy()))
             anomaly_label = Y.squeeze()
-            acc = eval.accuracy(anomaly_predict, anomaly_label)
+            acc = evaluation.accuracy(anomaly_predict, anomaly_label)
             total_acc += acc
             ctr += 1
             #scores = eval.torch_emmv_scores(self.model, X, scoring_func=scoring_function)

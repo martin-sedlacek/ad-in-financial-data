@@ -60,7 +60,7 @@ def kdd99(seq_length, seq_step, num_signals):
     return samples, labels, next_steps
 
 
-def kdd99_test(seq_length, seq_step, num_signals):
+def kdd99_test(seq_length, seq_step, num_signals, model):
     test = np.load('data/kdd99_test.npy')
     print('load kdd99_test from .npy')
 
@@ -99,14 +99,18 @@ def kdd99_test(seq_length, seq_step, num_signals):
     ###########################################
     num_samples_t = (samples.shape[0] - seq_length) // seq_step
     aa = np.empty([num_samples_t, seq_length, num_signals])
-    #bb = np.empty([num_samples_t, seq_length, 1])
-    bb = np.empty([num_samples_t, 1])
+    if model == "MAD-GAN":
+        bb = np.empty([num_samples_t, seq_length, 1])
+    elif model == "DeepAnT":
+        bb = np.empty([num_samples_t, 1])
     #bbb = np.empty([num_samples_t, seq_length, 1])
     next_steps = np.empty([num_samples_t, num_signals])
     for j in range(num_samples_t):
-        #bb[j, :, :] = np.reshape(labels[(j * seq_step):(j * seq_step + seq_length)], [-1, 1])
+        if model == "MAD-GAN":
+            bb[j, :, :] = np.reshape(labels[(j * seq_step):(j * seq_step + seq_length)], [-1, 1])
+        elif model == "DeepAnT":
+            bb[j] = labels[(j * seq_step + seq_length) + 1]
         #bbb[j, :, :] = np.reshape(idx[(j * seq_step):(j * seq_step + seq_length)], [-1, 1])
-        bb[j] = labels[(j * seq_step + seq_length)+1]
         for i in range(num_signals):
             aa[j, :, i] = samples[(j * seq_step):(j * seq_step + seq_length), i]
             next_steps[j, i] = samples[(j * seq_step + seq_length)+1, i]
@@ -118,9 +122,9 @@ def kdd99_test(seq_length, seq_step, num_signals):
     return samples, labels, next_steps
 
 
-def load_kdd99(seq_length, seq_stride, num_generated_features, batch_size):
+def load_kdd99(seq_length, seq_stride, num_generated_features, batch_size, model_type):
     train_samples, train_labels, train_preds = kdd99(seq_length, seq_stride, num_generated_features)
-    test_samples, test_labels, test_preds = kdd99_test(seq_length, seq_stride, num_generated_features)
+    test_samples, test_labels, test_preds = kdd99_test(seq_length, seq_stride, num_generated_features, model_type)
 
     train_x = torch.Tensor(train_samples)
     train_y = torch.Tensor(train_labels)
