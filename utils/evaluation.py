@@ -119,8 +119,30 @@ def torch_emmv_scores(trained_model, x, scoring_func=None, n_generated=10000, al
     return scores
 
 
-def accuracy(y_hat, y):  #y_hat is a matrix; 2nd dimension stores prediction scores for each class.
-    if len(y_hat.shape) > 1 and y_hat.shape[1] > 1:
-        y_hat = y_hat.argmax(axis=1)
-    cmp = (y_hat.type(y.dtype) == y)
-    return float(torch.sum(cmp)/len(y))
+def metric_calc(y_hat, y):
+    true_positives = true_negatives = false_positives = false_negatives = 0
+    for i in range(y.size(0)):
+        for j in range(y.size(1)):
+            cur_label = y[i][j].item()
+            cur_pred = y_hat[i][j].item()
+            if cur_label == 1 and cur_pred == 1:
+                true_positives += 1
+            elif cur_label == 1 and cur_pred == 0:
+                false_negatives += 1
+            elif cur_label == 0 and cur_pred == 1:
+                false_positives += 1
+            else:
+                true_negatives += 1
+    return true_positives, true_negatives, false_positives, false_negatives
+
+
+def accuracy(true_positives, true_negatives, y):
+    return (true_positives+true_negatives) / (y.size(0)*y.size(1))
+
+
+def precision(true_positives, false_positives):
+    return true_positives / (true_positives+false_positives)
+
+
+def recall(true_positives, false_negatives):
+    return true_positives / (true_positives+false_negatives)
