@@ -27,7 +27,7 @@ class MadGanTrainingPipeline():
             "D_acc": 0
         }
         batch_count = 0
-        for X, Y, P in real_dl:
+        for X, Y, P, PL in real_dl:
             bs = X.size(0)
 
             # Samples
@@ -75,7 +75,7 @@ class MadGanTrainingPipeline():
             "discriminator_loss_fake": 0,
         }
         batch_count = 0
-        for i, (X, Y, P) in enumerate(real_dl):
+        for i, (X, Y, P, PL) in enumerate(real_dl):
             bs = X.size(0)
 
             # Samples
