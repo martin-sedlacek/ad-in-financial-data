@@ -1,10 +1,15 @@
 import numpy as np
 import torch
 import pandas as pd
+import torch.utils.data as data
 from sklearn.decomposition import PCA
 from sklearn.model_selection import TimeSeriesSplit
 from datetime import datetime
 from os import path, listdir
+
+'''
+KDD99
+'''
 
 
 def kdd99(seq_length, seq_step, num_signals, gen_seq_len):
@@ -112,41 +117,92 @@ def load_kdd99(seq_length, seq_stride, num_generated_features, gen_seq_len, batc
         y = torch.Tensor(y)
         p = torch.Tensor(p)
         pb = torch.Tensor(pb)
-        data = torch.utils.data.TensorDataset(x, y, p, pb)
-        return torch.utils.data.DataLoader(data, shuffle=False, batch_size=bs)
+        ds = data.TensorDataset(x, y, p, pb)
+        return data.DataLoader(ds, shuffle=False, batch_size=bs)
 
     train_dl = make_dl(train_samples, train_labels, train_preds, train_preds_labels, batch_size)
     test_dl = make_dl(test_samples, test_labels, test_preds, test_preds_labels, batch_size)
     return train_dl, test_dl
 
 
+'''
+Financial data
+'''
+
+
+def filter_by_time(df, start, end):
+    return df.sort_index().loc[start:end]
+
+
+def drop_non_numeric(df):
+    return df.replace([np.inf, -np.inf], np.nan).dropna()
+
+
+def encode_date(df):
+    # Date = How many days since 2008-09-02?
+    # Date encoding this is a fairly slow transformation and you need let it run for a while
+    df['Date'] = df['Date'].apply(lambda x: int((datetime.strptime(x,'%Y-%m-%d') - datetime.strptime(
+        '2008-09-02', '%Y-%m-%d')).total_seconds() / 60 / 60 / 24))
+    return df
+
+
+def load_financial_data():
+    return pd.read_csv("data/normalised_result.csv")
+
+
 def load_sentiment_data():
-    data = pd.read_csv("./data/Combined_News_DJIA.csv", usecols=['Date', 'Label'])
+    df = pd.read_csv("./data/Combined_News_DJIA.csv", usecols=['Date', 'Label'])
 
     # Set Date as index
-    data['Date'] = pd.to_datetime(data['Date'])
-    data.set_index('Date', inplace=True)
+    df['Date'] = pd.to_datetime(df['Date'])
+    df.set_index('Date', inplace=True)
 
     # Rename column
-    data.columns = ['Sentiment']
-    return data
+    df.columns = ['Sentiment']
+    return df
 
 
 def load_spx_data(raw=False):
-    data = pd.read_csv("./data/spx.csv")
+    df = pd.read_csv("./data/spx.csv")
 
     # Set Date as index
-    data['Date'] = pd.to_datetime(data['Date'])
-    data.set_index('Date', inplace=True)
+    df['Date'] = pd.to_datetime(df['Date'])
+    df.set_index('Date', inplace=True)
 
     # Rename column
-    data.columns = ['SPX_Close']
+    df.columns = ['SPX_Close']
 
     if not raw:
         # Relative change features
-        data["SPX_Close"] = data["SPX_Close"].pct_change()
+        df["SPX_Close"] = df["SPX_Close"].pct_change()
 
-    return data
+    return df
+
+def load_txts(dir_path, ctr=-1, raw=False):
+    # Load the data for multiple .txt files
+    ll = []
+    csv_paths = [dir_path + x for x in listdir(dir_path) if x.endswith('.txt') and path.getsize(dir_path + x) > 0]
+    for file_path in csv_paths:
+        tmp_df = load_stock(file_path, ctr)
+        if not ctr < 0:
+            ctr += 1
+        ll.append(tmp_df)
+    df = pd.concat(ll, ignore_index=True)
+    df.reset_index(inplace=True, drop=True)
+
+    # Set Date as index
+    df['Date'] = pd.to_datetime(df['Date'])
+    df.set_index('Date', inplace=True)
+
+    if not raw:
+        # Relative change features
+        df["Open"] = df["Open"].pct_change()
+        df["Close"] = df["Close"].pct_change()
+        df["High"] = df["High"].pct_change()
+        df["Low"] = df["Low"].pct_change()
+        df["Volume"] = df["Volume"].pct_change()
+
+    return ctr, df
 
 
 def load_stock(file_path, ticker_code=-1):
@@ -156,32 +212,6 @@ def load_stock(file_path, ticker_code=-1):
     else:
         df['Ticker'] = ticker_code
     return df
-
-def load_txts(dir_path, ctr=-1, raw=False):
-    # Load the data for multiple .txt files
-    data = []
-    csv_paths = [dir_path + x for x in listdir(dir_path) if x.endswith('.txt') and path.getsize(dir_path + x) > 0]
-    for file_path in csv_paths:
-        df = load_stock(file_path, ctr)
-        if not ctr < 0:
-            ctr += 1
-        data.append(df)
-    data = pd.concat(data, ignore_index=True)
-    data.reset_index(inplace=True, drop=True)
-
-    # Set Date as index
-    data['Date'] = pd.to_datetime(data['Date'])
-    data.set_index('Date', inplace=True)
-
-    if not raw:
-        # Relative change features
-        data["Open"] = data["Open"].pct_change()
-        data["Close"] = data["Close"].pct_change()
-        data["High"] = data["High"].pct_change()
-        data["Low"] = data["Low"].pct_change()
-        data["Volume"] = data["Volume"].pct_change()
-
-    return ctr, data
 
 
 def load_financial(raw=False, encode_ticker=True):
@@ -212,45 +242,57 @@ def load_financial(raw=False, encode_ticker=True):
     result = drop_non_numeric(result)
 
     # apply Z-normalisation if raw flag is not set
+    columns = ['Open', 'High', 'Low', 'Close', 'Volume', 'SPX_Close']
     if not raw:
-        result = z_normalisation(result)
+        for c in columns:
+            result[c] = (result[c] - result[c].mean()) / result[c].std()
 
     return result
 
 
-def filter_by_time(df, start, end):
-    return df.sort_index().loc[start:end]
+def load_stock_as_crossvalidated_timeseries(file_path, seq_length, seq_stride, gen_seq_len, bs, num_features=7, normalise=True):
+    stock = load_stock(file_path)
+    stock['Date'] = pd.to_datetime(stock['Date'])
+    stock.set_index('Date', inplace=True)
 
+    sentiment = load_sentiment_data()
+    spx = load_spx_data(raw=True)
 
-def drop_non_numeric(df):
-    return df.replace([np.inf, -np.inf], np.nan).dropna()
+    start, end = '2008-09-01', '2016-07-01'
+    sentiment = filter_by_time(sentiment, start, end)
+    spx = filter_by_time(spx, start, end)
 
+    sentiment_labeled_df = stock.join(sentiment, how="outer")
+    samples = sentiment_labeled_df.join(spx, how="outer")
 
-def z_normalisation(df):
-    columns = ['Open', 'Close', 'High', 'Low', 'Close', 'Volume', 'SPX_Close']
+    samples = samples.drop(columns=['Ticker'])  # , 'Sentiment'
+    columns = ['Open', 'High', 'Low', 'Close', 'Volume', 'SPX_Close']
+
     for c in columns:
-        df[c] = (df[c] - df[c].mean()) / df[c].std()
-    return df
+        samples[c] = samples[c].pct_change()
 
+    samples = drop_non_numeric(samples)
 
-def encode_date(df):
-    # Date = How many days since 2008-09-02?
-    # Date encoding this is a fairly slow transformation and you need let it run for a while
-    df['Date'] = df['Date'].apply(lambda x: int((datetime.strptime(x,'%Y-%m-%d') - datetime.strptime(
-        '2008-09-02', '%Y-%m-%d')).total_seconds() / 60 / 60 / 24))
-    return df
+    if normalise:
+        for c in columns:
+            samples[c] = (samples[c] - samples[c].mean()) / samples[c].std()
 
+    samples = samples.values
 
-def load_financial_data():
-    return pd.read_csv("data/normalised_result.csv")
+    num_samples_t = (samples.shape[0] - seq_length - seq_length) // seq_stride
+    aa = np.empty([num_samples_t, seq_length, num_features])
+    next_steps = np.empty([num_samples_t, gen_seq_len, num_features])
+    for j in range(num_samples_t):
+        for i in range(num_features):
+            aa[j, :, i] = samples[(j * seq_stride):(j * seq_stride + seq_length), i]
+            next_steps[j, :, i] = samples[(j * seq_stride + seq_length):(j * seq_stride + seq_length + gen_seq_len), i]
 
-
-def forward_chaining_crossvalidation(df, batch_size):
-    tensor_data = torch.tensor(df.values)
+    prev_steps = torch.tensor(aa.astype(np.float32))
+    next_steps = torch.tensor(next_steps.astype(np.float32))
 
     # Generate forward chaining cross-validation ranges
     tscv = TimeSeriesSplit()
-    split_indices = tscv.split(df)
+    split_indices = tscv.split(prev_steps)
     train_indice_ranges = []
     test_indice_ranges = []
     for train_index, test_index in split_indices:
@@ -258,13 +300,16 @@ def forward_chaining_crossvalidation(df, batch_size):
         test_indice_ranges.append((test_index[0], test_index[len(test_index) - 1]))
 
     # Initialize data loaders
-    data_loaders = []
+    tscv_dl_list = []
     for fold in range(len(train_indice_ranges)):
         train_range = train_indice_ranges[fold]
         test_range = test_indice_ranges[fold]
-        training_iter = torch.utils.data.DataLoader(tensor_data[test_range[0]:test_range[1]], batch_size,
-                                                    shuffle=False, num_workers=2)
-        testing_iter = torch.utils.data.DataLoader(tensor_data[train_range[0]:train_range[1]], batch_size,
-                                                   shuffle=False, num_workers=2)
-        data_loaders.append((training_iter, testing_iter))
-    return data_loaders
+        x_train = torch.tensor(prev_steps[train_range[0]:train_range[1]])
+        p_train = torch.tensor(next_steps[train_range[0]:train_range[1]])
+        x_test = torch.tensor(prev_steps[test_range[0]:test_range[1]])
+        p_test = torch.tensor(next_steps[test_range[0]:test_range[1]])
+        train_data = data.TensorDataset(x_train, p_train)
+        test_data = data.TensorDataset(x_test, p_test)
+        training_iter = data.DataLoader(train_data, bs, shuffle=False, num_workers=2)
+        testing_iter = data.DataLoader(test_data, bs, shuffle=False, num_workers=2)
+        tscv_dl_list.append((training_iter, testing_iter))
