@@ -10,9 +10,7 @@ def excess_mass(t, t_max, volume_support, s_unif, s_X, n_generated):
     EM_t[0] = 1.
 
     for u in s_X_unique:
-        EM_t = np.maximum(EM_t, 1. / n_samples * (s_X > u).sum() -
-                        t * (s_unif > u).sum() / n_generated
-                        * volume_support)
+        EM_t = np.maximum(EM_t, 1. / n_samples * (s_X > u).sum() - t * (s_unif > u).sum() / n_generated * volume_support)
     amax = np.argmax(EM_t <= t_max) + 1
     if amax == 1:
         amax = -1 # failed to achieve t_max
