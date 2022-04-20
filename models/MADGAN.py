@@ -109,19 +109,20 @@ class Discriminator(nn.Module):
 
 
 class AnomalyDetector(object):
-
     def __init__(self,
                  *,
                  discriminator: nn.Module,
                  generator: nn.Module,
                  latent_space_dim: int,
                  res_weight: float = .2,
-                 anomaly_threshold: float = 1.0) -> None:
-        self.discriminator = discriminator.to('cpu')
-        self.generator = generator.to('cpu')
+                 anomaly_threshold: float = 1.0,
+                 DEVICE = "cpu") -> None:
+        self.discriminator = discriminator.to(DEVICE)
+        self.generator = generator.to(DEVICE)
         self.threshold = anomaly_threshold
         self.latent_space_dim = latent_space_dim
         self.res_weight = res_weight
+        self.DEVICE = DEVICE
 
     def predict(self, tensor: torch.Tensor) -> torch.Tensor:
         return (self.predict_proba(tensor) > self.threshold).int()
@@ -150,7 +151,7 @@ class AnomalyDetector(object):
 
         Z = torch.empty(
             (tensor.size(0), tensor.size(1), self.latent_space_dim),
-            requires_grad=True)
+            requires_grad=True, device=self.DEVICE)
         nn.init.normal_(Z, std=0.05)
 
         optimizer = torch.optim.RMSprop(params=[Z], lr=0.1)
