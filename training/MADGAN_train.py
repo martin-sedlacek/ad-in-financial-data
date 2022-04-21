@@ -75,7 +75,6 @@ class MadGanTrainingPipeline():
         print('Epoch ' + str(epoch) + ' training:')
         print(out)
 
-
     def train(self, seq_length, latent_dim, tscv_dl_list, D, G, D_optim, G_optim, loss_fn, random_seed,
               num_epochs, DEVICE, model_dir: Path = Path("models/madgan")) -> None:
         self.set_seed(random_seed)
@@ -89,13 +88,13 @@ class MadGanTrainingPipeline():
             self.evaluate(G, D, loss_fn, test_dl, seq_length, latent_dim, DEVICE, normal_label=0, anomaly_label=1)
             total_em = total_mv = 0
             for X, Y in test_dl:
-                scores = self.torch_emmv_scores(ad, X.to(DEVICE), DEVICE=DEVICE)
+                scores = self.MAD_GAN_EMMV(ad, X.to(DEVICE), DEVICE=DEVICE)
                 total_em += scores['em']
                 total_mv += scores['mv']
             print("EMMV evaluation:")
             print(total_em / len(test_dl), total_mv / len(test_dl))
 
-    def torch_emmv_scores(self, trained_model, x, n_generated=10000, alpha_min=0.9, alpha_max=0.999, t_max=0.9, DEVICE="cpu"):
+    def MAD_GAN_EMMV(self, trained_model, x, n_generated=10000, alpha_min=0.9, alpha_max=0.999, t_max=0.9, DEVICE="cpu"):
         # Get limits and volume support.
         lim_inf = torch.min(x.view(-1, x.size(-1)), dim=0)[0]
         lim_sup = torch.max(x.view(-1, x.size(-1)), dim=0)[0]
