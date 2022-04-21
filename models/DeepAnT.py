@@ -1,5 +1,4 @@
 import torch
-import numpy as np
 
 class DeepAnT_CNN(torch.nn.Module):
     def __init__(self, LOOKBACK_SIZE, DIMENSION, anomaly_threshold):
@@ -34,20 +33,19 @@ class DeepAnT_CNN(torch.nn.Module):
     @staticmethod
     def anomaly_detector(prediction_seq, ground_truth_seq, anm_det_thr):
         # calculate Euclidean between actual seq and predicted seq
-        # ist = np.linalg.norm(ground_truth_seq - prediction_seq)
-        dist = np.absolute(ground_truth_seq - prediction_seq).mean(axis=prediction_seq.ndim-1)
-        return (dist > anm_det_thr).astype(float)
+        dist = torch.absolute(ground_truth_seq - prediction_seq).mean(dim=prediction_seq.dim()-1)
+        return (dist > anm_det_thr).to(dtype=torch.float32)
 
 
 class DeepAnT_LSTM(torch.nn.Module):
-    def __init__(self, LOOKBACK_SIZE, DIMENSION, anomaly_threshold):
+    def __init__(self, dim, hidden_dim, layers, anomaly_threshold):
         super(DeepAnT_LSTM, self).__init__()
         self.anomaly_threshold = anomaly_threshold
-        self.lstm_1_layer = torch.nn.LSTM(DIMENSION, 128, 2)
+        self.lstm_1_layer = torch.nn.LSTM(dim, hidden_dim, layers)
         self.dropout_1_layer = torch.nn.Dropout(p=0.2)
-        self.lstm_2_layer = torch.nn.LSTM(128, 64, 2)
+        self.lstm_2_layer = torch.nn.LSTM(hidden_dim, 64, layers)
         self.dropout_2_layer = torch.nn.Dropout(p=0.2)
-        self.linear_layer = torch.nn.Linear(64, DIMENSION)
+        self.linear_layer = torch.nn.Linear(64, dim)
 
     def forward(self, x):
         x, (_, _) = self.lstm_1_layer(x)
@@ -59,6 +57,5 @@ class DeepAnT_LSTM(torch.nn.Module):
     @staticmethod
     def anomaly_detector(prediction_seq, ground_truth_seq, anm_det_thr):
         # calculate Euclidean between actual seq and predicted seq
-        # ist = np.linalg.norm(ground_truth_seq - prediction_seq)
-        dist = np.absolute(ground_truth_seq - prediction_seq).mean(axis=prediction_seq.ndim-1)
-        return (dist > anm_det_thr).astype(float)
+        dist = torch.absolute(ground_truth_seq - prediction_seq).mean(dim=prediction_seq.dim()-1)
+        return (dist > anm_det_thr).to(dtype=torch.float32)
