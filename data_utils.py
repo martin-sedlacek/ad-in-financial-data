@@ -12,72 +12,21 @@ KDD99
 '''
 
 
-def kdd99(seq_length, seq_step, num_signals, gen_seq_len):
-    train = np.load('data/kdd99_train.npy')
-    print('load kdd99_train from .npy')
-    m, n = train.shape  # m=562387, n=35
-    # normalization
+def load_kdd99(file_path, seq_length, seq_step, num_signals, gen_seq_len, bs):
+    dataset = np.load(file_path)
+
+    m, n = dataset.shape  # m1=494021, n1=35
     for i in range(n - 1):
-        # print('i=', i)
-        A = max(train[:, i])
-        # print('A=', A)
-        if A != 0:
-            train[:, i] /= max(train[:, i])
-            # scale from -1 to 1
-            train[:, i] = 2 * train[:, i] - 1
-        else:
-            train[:, i] = train[:, i]
-
-    samples = train[:, 0:n - 1]
-    labels = train[:, n - 1]  # the last colummn is label
-
-    # -- apply PCA dimension reduction for multi-variate GAN-AD -- #
-    # -- the best PC dimension is chosen pc=6 -- #
-    X_n = samples
-    n_components = num_signals
-    pca = PCA(n_components, svd_solver='full')
-    pca.fit(X_n)
-    ex_var = pca.explained_variance_ratio_
-    pc = pca.components_
-    # projected values on the principal component
-    T_n = np.matmul(X_n, pc.transpose(1, 0))
-    samples = T_n
-    # # only for one-dimensional
-    # samples = T_n.reshape([samples.shape[0], ])
-    num_samples = (samples.shape[0] - seq_length - gen_seq_len) // seq_step
-    aa = np.empty([num_samples, seq_length, num_signals])
-    bb = np.empty([num_samples, seq_length, 1])
-    next_steps = np.empty([num_samples, gen_seq_len, num_signals])
-    next_steps_labels = np.empty([num_samples, gen_seq_len, 1])
-
-    for j in range(num_samples):
-        bb[j, :, :] = np.reshape(labels[(j * seq_step):(j * seq_step + seq_length)], [-1, 1])
-        next_steps_labels[j, :, :] = np.reshape(labels[(j * seq_step + seq_length):(j * seq_step + seq_length + gen_seq_len)], [-1, 1])
-        for i in range(num_signals):
-            aa[j, :, i] = samples[(j * seq_step):(j * seq_step + seq_length), i]
-            next_steps[j, :, i] = samples[(j * seq_step + seq_length):(j * seq_step + seq_length + gen_seq_len), i]
-
-    return aa, bb, next_steps, next_steps_labels
-
-
-def kdd99_test(seq_length, seq_step, num_signals, gen_seq_len):
-    test = np.load('data/kdd99_test.npy')
-    print('load kdd99_test from .npy')
-
-    m, n = test.shape  # m1=494021, n1=35
-
-    for i in range(n - 1):
-        B = max(test[:, i])
+        B = max(dataset[:, i])
         if B != 0:
-            test[:, i] /= max(test[:, i])
+            dataset[:, i] /= max(dataset[:, i])
             # scale from -1 to 1
-            test[:, i] = 2 * test[:, i] - 1
+            dataset[:, i] = 2 * dataset[:, i] - 1
         else:
-            test[:, i] = test[:, i]
+            dataset[:, i] = dataset[:, i]
 
-    samples = test[:, 0:n - 1]
-    labels = test[:, n - 1]
-    idx = np.asarray(list(range(0, m)))  # record the idx of each point
+    samples = dataset[:, 0:n - 1]
+    labels = dataset[:, n - 1]
 
     # -- apply PCA dimension reduction for multi-variate GAN-AD -- #
     # -- the best PC dimension is chosen pc=6 -- #
@@ -89,39 +38,30 @@ def kdd99_test(seq_length, seq_step, num_signals, gen_seq_len):
     # projected values on the principal component
     T_a = np.matmul(X_a, pc_a.transpose(1, 0))
     samples = T_a
-    # # only for one-dimensional
-    # samples = T_a.reshape([samples.shape[0], ])
-    num_samples_t = (samples.shape[0] - seq_length - gen_seq_len) // seq_step
 
-    aa = np.empty([num_samples_t, seq_length, num_signals])
-    bb = np.empty([num_samples_t, seq_length, 1])
+    # Generate datasets
+    num_samples_t = (samples.shape[0] - seq_length - gen_seq_len) // seq_step
+    prev_steps = np.empty([num_samples_t, seq_length, num_signals])
+    prev_steps_labels = np.empty([num_samples_t, seq_length, 1])
     next_steps = np.empty([num_samples_t, gen_seq_len, num_signals])
     next_steps_labels = np.empty([num_samples_t, gen_seq_len, 1])
 
     for j in range(num_samples_t):
-        bb[j, :, :] = np.reshape(labels[(j * seq_step):(j * seq_step + seq_length)], [-1, 1])
+        prev_steps_labels[j, :, :] = np.reshape(labels[(j * seq_step):(j * seq_step + seq_length)], [-1, 1])
         next_steps_labels[j, :, :] = np.reshape(labels[(j * seq_step + seq_length):(j * seq_step + seq_length + gen_seq_len)], [-1, 1])
         for i in range(num_signals):
-            aa[j, :, i] = samples[(j * seq_step):(j * seq_step + seq_length), i]
+            prev_steps[j, :, i] = samples[(j * seq_step):(j * seq_step + seq_length), i]
             next_steps[j, :, i] = samples[(j * seq_step + seq_length):(j * seq_step + seq_length + gen_seq_len), i]
 
-    return aa, bb, next_steps, next_steps_labels
+    ll = [prev_steps, prev_steps_labels, next_steps, next_steps_labels]
+    ll = [torch.tensor(x.astype(np.float32)) for x in ll]
+    ds = data.TensorDataset(ll[0], ll[1], ll[2], ll[3])
+    return data.DataLoader(ds, shuffle=False, batch_size=bs)
 
 
-def load_kdd99(seq_length, seq_stride, num_generated_features, gen_seq_len, batch_size):
-    train_samples, train_labels, train_preds, train_preds_labels = kdd99(seq_length, seq_stride, num_generated_features, gen_seq_len)
-    test_samples, test_labels, test_preds, test_preds_labels = kdd99_test(seq_length, seq_stride, num_generated_features, gen_seq_len)
-
-    def make_dl(x, y, p, pb, bs):
-        x = torch.Tensor(x)
-        y = torch.Tensor(y)
-        p = torch.Tensor(p)
-        pb = torch.Tensor(pb)
-        ds = data.TensorDataset(x, y, p, pb)
-        return data.DataLoader(ds, shuffle=False, batch_size=bs)
-
-    train_dl = make_dl(train_samples, train_labels, train_preds, train_preds_labels, batch_size)
-    test_dl = make_dl(test_samples, test_labels, test_preds, test_preds_labels, batch_size)
+def kdd99(seq_length, seq_stride, num_generated_features, gen_seq_len, batch_size):
+    train_dl = load_kdd99('./data/kdd99_train.npy', seq_length, seq_stride, num_generated_features, gen_seq_len, batch_size)
+    test_dl = load_kdd99('./data/kdd99_test.npy', seq_length, seq_stride, num_generated_features, gen_seq_len, batch_size)
     return train_dl, test_dl
 
 
@@ -265,7 +205,7 @@ def load_stock_as_crossvalidated_timeseries(file_path, seq_length, seq_stride, g
     sentiment_labeled_df = stock.join(sentiment, how="outer")
     samples = sentiment_labeled_df.join(spx, how="outer")
 
-    samples = samples.drop(columns=['Ticker'])  # , 'Sentiment'
+    samples = samples.drop(columns=['Ticker'])
     columns = ['Open', 'High', 'Low', 'Close', 'Volume', 'SPX_Close']
 
     for c in columns:
@@ -280,14 +220,14 @@ def load_stock_as_crossvalidated_timeseries(file_path, seq_length, seq_stride, g
     samples = samples.values
 
     num_samples_t = (samples.shape[0] - seq_length - seq_length) // seq_stride
-    aa = np.empty([num_samples_t, seq_length, num_features])
+    prev_steps = np.empty([num_samples_t, seq_length, num_features])
     next_steps = np.empty([num_samples_t, gen_seq_len, num_features])
     for j in range(num_samples_t):
         for i in range(num_features):
-            aa[j, :, i] = samples[(j * seq_stride):(j * seq_stride + seq_length), i]
+            prev_steps[j, :, i] = samples[(j * seq_stride):(j * seq_stride + seq_length), i]
             next_steps[j, :, i] = samples[(j * seq_stride + seq_length):(j * seq_stride + seq_length + gen_seq_len), i]
 
-    prev_steps = torch.tensor(aa.astype(np.float32))
+    prev_steps = torch.tensor(prev_steps.astype(np.float32))
     next_steps = torch.tensor(next_steps.astype(np.float32))
 
     # Generate forward chaining cross-validation ranges
@@ -304,12 +244,14 @@ def load_stock_as_crossvalidated_timeseries(file_path, seq_length, seq_stride, g
     for fold in range(len(train_indice_ranges)):
         train_range = train_indice_ranges[fold]
         test_range = test_indice_ranges[fold]
-        x_train = torch.tensor(prev_steps[train_range[0]:train_range[1]])
-        p_train = torch.tensor(next_steps[train_range[0]:train_range[1]])
-        x_test = torch.tensor(prev_steps[test_range[0]:test_range[1]])
-        p_test = torch.tensor(next_steps[test_range[0]:test_range[1]])
+        x_train = prev_steps[train_range[0]:train_range[1]].clone()
+        p_train = next_steps[train_range[0]:train_range[1]].clone()
+        x_test = prev_steps[test_range[0]:test_range[1]].clone()
+        p_test = next_steps[test_range[0]:test_range[1]].clone()
         train_data = data.TensorDataset(x_train, p_train)
         test_data = data.TensorDataset(x_test, p_test)
         training_iter = data.DataLoader(train_data, bs, shuffle=False, num_workers=2)
         testing_iter = data.DataLoader(test_data, bs, shuffle=False, num_workers=2)
         tscv_dl_list.append((training_iter, testing_iter))
+
+    return tscv_dl_list
