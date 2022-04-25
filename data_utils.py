@@ -7,20 +7,68 @@ from sklearn.model_selection import TimeSeriesSplit
 from datetime import datetime
 from os import path, listdir
 
-'''
-KDD99
-'''
+
+'''***************************************************************************************
+*   KDD99 dataset sources 
+***************************************************************************************
+*    Paper title: Fence GAN: Towards Better Anomaly Detection
+*    Availability: https://github.com/phuccuongngo99/Fence_GAN; https://arxiv.org/pdf/1904.01209v1.pdf
+*    Author: Ngo C. et al.
+*    Date: Apr 20, 2021
+*    Associated data: 
+*       - data/kdd99/X_train_anomaly.npy
+*       - data/kdd99/X_train_normal.npy
+*       - data/kdd99/X_test_anomaly.npy
+*       - data/kdd99/X_test_normal.npy 
+***************************************************************************************
+*    Paper title: MAD-GAN: Multivariate Anomaly Detection for Time Series Data with Generative Adversarial Networks
+*    Availability: https://github.com/LiDan456/MAD-GANs; https://arxiv.org/pdf/1901.04997.pdf
+*    Author: Li et al.
+*    Date: Jan 17, 2019
+*    Associated data: 
+*       - data/kdd99/kdd99_test.npy
+*       - data/kdd99/kdd99_train.npy
+***************************************************************************************'''
 
 
-def load_kdd99(file_path, seq_length, seq_step, num_signals, gen_seq_len, bs):
+def load_large_kdd99(file_path, seq_length, seq_step, num_signals, gen_seq_len, bs):
+    samples = np.load(file_path, allow_pickle=True)
+
+    num_samples_t = (samples.shape[0] - seq_length - gen_seq_len) // seq_step
+    prev_steps = np.empty([num_samples_t, seq_length, num_signals])
+    next_steps = np.empty([num_samples_t, gen_seq_len, num_signals])
+
+    for j in range(num_samples_t):
+        for i in range(num_signals):
+            prev_steps[j, :, i] = samples[(j * seq_step):(j * seq_step + seq_length), i]
+            next_steps[j, :, i] = samples[(j * seq_step + seq_length):(j * seq_step + seq_length + gen_seq_len), i]
+
+    ll = [prev_steps, next_steps]
+    ll = [torch.tensor(x.astype(np.float32)) for x in ll]
+    ds = data.TensorDataset(ll[0], ll[1])
+    return data.DataLoader(ds, shuffle=False, batch_size=bs)
+
+
+def large_kdd99(seq_length, seq_stride, num_features, gen_seq_len, batch_size):
+    train_anomaly_dl = load_large_kdd99('data/kdd99/X_train_anomaly.npy', seq_length, seq_stride, num_features, gen_seq_len, batch_size)
+    train_normal_dl = load_large_kdd99('data/kdd99/X_train_normal.npy', seq_length, seq_stride, num_features, gen_seq_len, batch_size)
+    test_anomaly_dl = load_large_kdd99('data/kdd99/X_test_anomaly.npy', seq_length, seq_stride, num_features, gen_seq_len, batch_size)
+    test_normal_dl = load_large_kdd99('data/kdd99/X_test_normal.npy', seq_length, seq_stride, num_features, gen_seq_len, batch_size)
+    return train_anomaly_dl, train_normal_dl, test_anomaly_dl, test_normal_dl
+
+
+# ***************************************************************************************
+# this method contains parts either taken directly or inspired by the code associated with Li et al. (2019)
+# Availability: https://github.com/LiDan456/MAD-GANs; https://arxiv.org/pdf/1901.04997.pdf
+# ***************************************************************************************
+def load_small_kdd99(file_path, seq_length, seq_step, num_signals, gen_seq_len, bs, deepant=False):
     dataset = np.load(file_path)
 
-    m, n = dataset.shape  # m1=494021, n1=35
+    m, n = dataset.shape
     for i in range(n - 1):
         B = max(dataset[:, i])
         if B != 0:
             dataset[:, i] /= max(dataset[:, i])
-            # scale from -1 to 1
             dataset[:, i] = 2 * dataset[:, i] - 1
         else:
             dataset[:, i] = dataset[:, i]
@@ -28,8 +76,7 @@ def load_kdd99(file_path, seq_length, seq_step, num_signals, gen_seq_len, bs):
     samples = dataset[:, 0:n - 1]
     labels = dataset[:, n - 1]
 
-    # -- apply PCA dimension reduction for multi-variate GAN-AD -- #
-    # -- the best PC dimension is chosen pc=6 -- #
+    # apply PCA dimension reduction for multi-variate data
     X_a = samples
     n_components = num_signals
     pca_a = PCA(n_components, svd_solver='full')
@@ -53,21 +100,50 @@ def load_kdd99(file_path, seq_length, seq_step, num_signals, gen_seq_len, bs):
             prev_steps[j, :, i] = samples[(j * seq_step):(j * seq_step + seq_length), i]
             next_steps[j, :, i] = samples[(j * seq_step + seq_length):(j * seq_step + seq_length + gen_seq_len), i]
 
-    ll = [prev_steps, prev_steps_labels, next_steps, next_steps_labels]
-    ll = [torch.tensor(x.astype(np.float32)) for x in ll]
-    ds = data.TensorDataset(ll[0], ll[1], ll[2], ll[3])
+    if deepant:
+        ll = [prev_steps, prev_steps_labels, next_steps, next_steps_labels]
+        ll = [torch.tensor(x.astype(np.float32)) for x in ll]
+        ds = data.TensorDataset(ll[0], ll[1], ll[2], ll[3])
+    else:
+        ll = [prev_steps, prev_steps_labels]
+        ll = [torch.tensor(x.astype(np.float32)) for x in ll]
+        ds = data.TensorDataset(ll[0], ll[1])
+
     return data.DataLoader(ds, shuffle=False, batch_size=bs)
 
 
-def kdd99(seq_length, seq_stride, num_generated_features, gen_seq_len, batch_size):
-    train_dl = load_kdd99('./data/kdd99_train.npy', seq_length, seq_stride, num_generated_features, gen_seq_len, batch_size)
-    test_dl = load_kdd99('./data/kdd99_test.npy', seq_length, seq_stride, num_generated_features, gen_seq_len, batch_size)
+def kdd99(seq_length, seq_stride, num_generated_features, gen_seq_len, batch_size, deepant=False):
+    train_dl = load_small_kdd99('data/kdd99/kdd99_train.npy', seq_length, seq_stride, num_generated_features, gen_seq_len, batch_size, deepant)
+    test_dl = load_small_kdd99('data/kdd99/kdd99_test.npy', seq_length, seq_stride, num_generated_features, gen_seq_len, batch_size, deepant)
     return train_dl, test_dl
 
 
-'''
-Financial data
-'''
+'''***************************************************************************************
+*   Financial data sources
+***************************************************************************************
+*    Title: Daily News for Stock Market Prediction
+*    Availability: https://www.kaggle.com/datasets/aaron7sun/stocknews?ref=hackernoon.com
+*    Author: AARON7SUN (Kaggle alias)
+*    Date: 2020
+*    Associated data: 
+*       - data/financial_data/RedditNews.csv
+*       - data/financial_data/Combined_DJIA.csv
+***************************************************************************************
+*    Title: Huge Stock Market Dataset
+*    Availability: https://www.kaggle.com/datasets/borismarjanovic/price-volume-data-for-all-us-stocks-etfs?ref=hackernoon.com
+*    Author: BORIS MARJANOVIC (Kaggle alias)
+*    Date: 2018
+*    Associated data: 
+*       - data/financial_data/ETFs/
+*       - data/financial_data/Stocks/
+***************************************************************************************
+*    Title: S&P 500 stock data
+*    Availability: https://www.kaggle.com/datasets/camnugent/sandp500
+*    Author: CAM NUGENT (Kaggle alias)
+*    Date: 2018
+*    Associated data: 
+*       - data/financial_data/spx.csv
+***************************************************************************************'''
 
 
 def filter_by_time(df, start, end):
@@ -87,11 +163,11 @@ def encode_date(df):
 
 
 def load_financial_data():
-    return pd.read_csv("data/normalised_result.csv")
+    return pd.read_csv("data/financial_data/normalised_result.csv")
 
 
 def load_sentiment_data():
-    df = pd.read_csv("./data/Combined_News_DJIA.csv", usecols=['Date', 'Label'])
+    df = pd.read_csv("data/financial_data/Combined_News_DJIA.csv", usecols=['Date', 'Label'])
 
     # Set Date as index
     df['Date'] = pd.to_datetime(df['Date'])
@@ -103,7 +179,7 @@ def load_sentiment_data():
 
 
 def load_spx_data(raw=False):
-    df = pd.read_csv("./data/spx.csv")
+    df = pd.read_csv("data/financial_data/spx.csv")
 
     # Set Date as index
     df['Date'] = pd.to_datetime(df['Date'])
@@ -117,6 +193,7 @@ def load_spx_data(raw=False):
         df["SPX_Close"] = df["SPX_Close"].pct_change()
 
     return df
+
 
 def load_txts(dir_path, ctr=-1, raw=False):
     # Load the data for multiple .txt files
@@ -161,11 +238,11 @@ def load_financial(raw=False, encode_ticker=True):
 
     if encode_ticker:
         c = 0
-        c, stocks = load_txts('./data/Stocks/', c, raw=raw)
-        c, etfs = load_txts('./data/ETFs/', c, raw=raw)
+        c, stocks = load_txts('data/financial_data/Stocks/', c, raw=raw)
+        c, etfs = load_txts('data/financial_data/ETFs/', c, raw=raw)
     else:
-        _, stocks = load_txts('./data/Stocks/', raw=raw)
-        _, etfs = load_txts('./data/ETFs/', raw=raw)
+        _, stocks = load_txts('data/financial_data/Stocks/', raw=raw)
+        _, etfs = load_txts('data/financial_data/ETFs/', raw=raw)
 
     # Filter sentiment and spx dataframes by time
     start, end = '2008-09-01', '2016-07-01'
