@@ -9,116 +9,6 @@ from os import path, listdir
 
 
 '''***************************************************************************************
-*   KDD99 dataset sources 
-***************************************************************************************
-*    Paper title: Fence GAN: Towards Better Anomaly Detection
-*    Availability: https://github.com/phuccuongngo99/Fence_GAN; https://arxiv.org/pdf/1904.01209v1.pdf
-*    Author: Ngo C. et al.
-*    Date: Apr 20, 2021
-*    Associated data: 
-*       - data/kdd99/X_train_anomaly.npy
-*       - data/kdd99/X_train_normal.npy
-*       - data/kdd99/X_test_anomaly.npy
-*       - data/kdd99/X_test_normal.npy 
-***************************************************************************************
-*    Paper title: MAD-GAN: Multivariate Anomaly Detection for Time Series Data with Generative Adversarial Networks
-*    Availability: https://github.com/LiDan456/MAD-GANs; https://arxiv.org/pdf/1901.04997.pdf
-*    Author: Li et al.
-*    Date: Jan 17, 2019
-*    Associated data: 
-*       - data/kdd99/kdd99_test.npy
-*       - data/kdd99/kdd99_train.npy
-***************************************************************************************'''
-
-
-def load_large_kdd99(file_path, seq_length, seq_step, num_signals, gen_seq_len, bs):
-    samples = np.load(file_path, allow_pickle=True)
-
-    num_samples_t = (samples.shape[0] - seq_length - gen_seq_len) // seq_step
-    prev_steps = np.empty([num_samples_t, seq_length, num_signals])
-    next_steps = np.empty([num_samples_t, gen_seq_len, num_signals])
-
-    for j in range(num_samples_t):
-        for i in range(num_signals):
-            prev_steps[j, :, i] = samples[(j * seq_step):(j * seq_step + seq_length), i]
-            next_steps[j, :, i] = samples[(j * seq_step + seq_length):(j * seq_step + seq_length + gen_seq_len), i]
-
-    ll = [prev_steps, next_steps]
-    ll = [torch.tensor(x.astype(np.float32)) for x in ll]
-    ds = data.TensorDataset(ll[0], ll[1])
-    return data.DataLoader(ds, shuffle=False, batch_size=bs)
-
-
-def large_kdd99(seq_length, seq_stride, num_features, gen_seq_len, batch_size):
-    train_anomaly_dl = load_large_kdd99('data/kdd99/X_train_anomaly.npy', seq_length, seq_stride, num_features, gen_seq_len, batch_size)
-    train_normal_dl = load_large_kdd99('data/kdd99/X_train_normal.npy', seq_length, seq_stride, num_features, gen_seq_len, batch_size)
-    test_anomaly_dl = load_large_kdd99('data/kdd99/X_test_anomaly.npy', seq_length, seq_stride, num_features, gen_seq_len, batch_size)
-    test_normal_dl = load_large_kdd99('data/kdd99/X_test_normal.npy', seq_length, seq_stride, num_features, gen_seq_len, batch_size)
-    return train_anomaly_dl, train_normal_dl, test_anomaly_dl, test_normal_dl
-
-
-# ***************************************************************************************
-# this method contains parts either taken directly or inspired by the code associated with Li et al. (2019)
-# Availability: https://github.com/LiDan456/MAD-GANs; https://arxiv.org/pdf/1901.04997.pdf
-# ***************************************************************************************
-def load_small_kdd99(file_path, seq_length, seq_step, num_signals, gen_seq_len, bs, deepant=False):
-    dataset = np.load(file_path)
-
-    m, n = dataset.shape
-    for i in range(n - 1):
-        B = max(dataset[:, i])
-        if B != 0:
-            dataset[:, i] /= max(dataset[:, i])
-            dataset[:, i] = 2 * dataset[:, i] - 1
-        else:
-            dataset[:, i] = dataset[:, i]
-
-    samples = dataset[:, 0:n - 1]
-    labels = dataset[:, n - 1]
-
-    # apply PCA dimension reduction for multi-variate data
-    X_a = samples
-    n_components = num_signals
-    pca_a = PCA(n_components, svd_solver='full')
-    pca_a.fit(X_a)
-    pc_a = pca_a.components_
-    # projected values on the principal component
-    T_a = np.matmul(X_a, pc_a.transpose(1, 0))
-    samples = T_a
-
-    # Generate datasets
-    num_samples_t = (samples.shape[0] - seq_length - gen_seq_len) // seq_step
-    prev_steps = np.empty([num_samples_t, seq_length, num_signals])
-    prev_steps_labels = np.empty([num_samples_t, seq_length, 1])
-    next_steps = np.empty([num_samples_t, gen_seq_len, num_signals])
-    next_steps_labels = np.empty([num_samples_t, gen_seq_len, 1])
-
-    for j in range(num_samples_t):
-        prev_steps_labels[j, :, :] = np.reshape(labels[(j * seq_step):(j * seq_step + seq_length)], [-1, 1])
-        next_steps_labels[j, :, :] = np.reshape(labels[(j * seq_step + seq_length):(j * seq_step + seq_length + gen_seq_len)], [-1, 1])
-        for i in range(num_signals):
-            prev_steps[j, :, i] = samples[(j * seq_step):(j * seq_step + seq_length), i]
-            next_steps[j, :, i] = samples[(j * seq_step + seq_length):(j * seq_step + seq_length + gen_seq_len), i]
-
-    if deepant:
-        ll = [prev_steps, prev_steps_labels, next_steps, next_steps_labels]
-        ll = [torch.tensor(x.astype(np.float32)) for x in ll]
-        ds = data.TensorDataset(ll[0], ll[1], ll[2], ll[3])
-    else:
-        ll = [prev_steps, prev_steps_labels]
-        ll = [torch.tensor(x.astype(np.float32)) for x in ll]
-        ds = data.TensorDataset(ll[0], ll[1])
-
-    return data.DataLoader(ds, shuffle=False, batch_size=bs)
-
-
-def kdd99(seq_length, seq_stride, num_generated_features, gen_seq_len, batch_size, deepant=False):
-    train_dl = load_small_kdd99('data/kdd99/kdd99_train.npy', seq_length, seq_stride, num_generated_features, gen_seq_len, batch_size, deepant)
-    test_dl = load_small_kdd99('data/kdd99/kdd99_test.npy', seq_length, seq_stride, num_generated_features, gen_seq_len, batch_size, deepant)
-    return train_dl, test_dl
-
-
-'''***************************************************************************************
 *   Financial data sources
 ***************************************************************************************
 *    Title: Daily News for Stock Market Prediction
@@ -267,7 +157,7 @@ def load_financial(raw=False, encode_ticker=True):
     return result
 
 
-def load_stock_as_crossvalidated_timeseries(file_path, seq_length, seq_stride, gen_seq_len, bs, num_features=7, normalise=True):
+def load_stock_as_crossvalidated_timeseries(file_path, seq_length, seq_stride, gen_seq_len, bs, num_features=7, normalise=True, load_as_dl=True):
     stock = load_stock(file_path)
     stock['Date'] = pd.to_datetime(stock['Date'])
     stock.set_index('Date', inplace=True)
@@ -325,10 +215,104 @@ def load_stock_as_crossvalidated_timeseries(file_path, seq_length, seq_stride, g
         p_train = next_steps[train_range[0]:train_range[1]].clone()
         x_test = prev_steps[test_range[0]:test_range[1]].clone()
         p_test = next_steps[test_range[0]:test_range[1]].clone()
-        train_data = data.TensorDataset(x_train, p_train)
-        test_data = data.TensorDataset(x_test, p_test)
-        training_iter = data.DataLoader(train_data, bs, shuffle=False, num_workers=2)
-        testing_iter = data.DataLoader(test_data, bs, shuffle=False, num_workers=2)
-        tscv_dl_list.append((training_iter, testing_iter))
-
+        if load_as_dl:
+            train_data = data.TensorDataset(x_train, p_train)
+            test_data = data.TensorDataset(x_test, p_test)
+            training_iter = data.DataLoader(train_data, bs, shuffle=False, num_workers=2)
+            testing_iter = data.DataLoader(test_data, bs, shuffle=False, num_workers=2)
+            tscv_dl_list.append((training_iter, testing_iter))
+        else:
+            tscv_dl_list.append((x_train.numpy(), p_train.numpy(), x_test.numpy(), p_test.numpy()))
     return tscv_dl_list
+
+
+'''***************************************************************************************
+*   KDD99 dataset sources 
+***************************************************************************************
+*    Paper title: MAD-GAN: Multivariate Anomaly Detection for Time Series Data with Generative Adversarial Networks
+*    Availability: https://github.com/LiDan456/MAD-GANs; https://arxiv.org/pdf/1901.04997.pdf
+*    Author: Li et al.
+*    Date: Jan 17, 2019
+*    Associated data: 
+*       - data/kdd99/kdd99_test.npy
+*       - data/kdd99/kdd99_train.npy
+***************************************************************************************'''
+
+
+# ***************************************************************************************
+# The load_kdd99 method contains parts inspired by the original code for data load associated with Li et al. (2019)
+# Availability: https://github.com/LiDan456/MAD-GANs; https://arxiv.org/pdf/1901.04997.pdf
+# ***************************************************************************************
+def load_kdd99(file_path, seq_length, seq_step, num_signals, gen_seq_len): #, bs, deepant=False
+    dataset = np.load(file_path)
+
+    m, n = dataset.shape
+    for i in range(n - 1):
+        B = max(dataset[:, i])
+        if B != 0:
+            dataset[:, i] /= max(dataset[:, i])
+            dataset[:, i] = 2 * dataset[:, i] - 1
+        else:
+            dataset[:, i] = dataset[:, i]
+
+    samples = dataset[:, 0:n - 1]
+    labels = dataset[:, n - 1]
+
+    # apply PCA dimension reduction for multi-variate data
+    X_a = samples
+    n_components = num_signals
+    pca_a = PCA(n_components, svd_solver='full')
+    pca_a.fit(X_a)
+    pc_a = pca_a.components_
+    # projected values on the principal component
+    T_a = np.matmul(X_a, pc_a.transpose(1, 0))
+    samples = T_a
+
+    # Generate datasets
+    num_samples_t = (samples.shape[0] - seq_length - gen_seq_len) // seq_step
+    prev_steps = np.empty([num_samples_t, seq_length, num_signals])
+    prev_steps_labels = np.empty([num_samples_t, seq_length, 1])
+    next_steps = np.empty([num_samples_t, gen_seq_len, num_signals])
+    next_steps_labels = np.empty([num_samples_t, gen_seq_len, 1])
+
+    for j in range(num_samples_t):
+        prev_steps_labels[j, :, :] = np.reshape(labels[(j * seq_step):(j * seq_step + seq_length)], [-1, 1])
+        next_steps_labels[j, :, :] = np.reshape(labels[(j * seq_step + seq_length):(j * seq_step + seq_length + gen_seq_len)], [-1, 1])
+        for i in range(num_signals):
+            prev_steps[j, :, i] = samples[(j * seq_step):(j * seq_step + seq_length), i]
+            next_steps[j, :, i] = samples[(j * seq_step + seq_length):(j * seq_step + seq_length + gen_seq_len), i]
+
+    '''if deepant:
+        ll = [prev_steps, prev_steps_labels, next_steps, next_steps_labels]
+        ll = [torch.tensor(x.astype(np.float32)) for x in ll]
+        ds = data.TensorDataset(ll[0], ll[1], ll[2], ll[3])
+    else:
+        ll = [prev_steps, prev_steps_labels]
+        ll = [torch.tensor(x.astype(np.float32)) for x in ll]
+        ds = data.TensorDataset(ll[0], ll[1])
+
+    return data.DataLoader(ds, shuffle=False, batch_size=bs)'''
+    return [prev_steps, prev_steps_labels, next_steps, next_steps_labels]
+
+
+def make_kdd99_dl(ll, bs, deepant=False):
+    ll = [torch.tensor(x.astype(np.float32)) for x in ll]
+
+    if deepant:
+        #ll = [prev_steps, prev_steps_labels, next_steps, next_steps_labels]
+        #ll = [torch.tensor(x.astype(np.float32)) for x in ll]
+        ds = data.TensorDataset(ll[0], ll[1], ll[2], ll[3])
+    else:
+        #ll = [prev_steps, prev_steps_labels]
+        #ll = [torch.tensor(x.astype(np.float32)) for x in ll]
+        ds = data.TensorDataset(ll[0], ll[1])
+
+    return data.DataLoader(ds, shuffle=False, batch_size=bs)
+
+
+def kdd99(seq_length, seq_stride, num_generated_features, gen_seq_len, batch_size, deepant=False):
+    train_ll = load_kdd99('data/kdd99/kdd99_train.npy', seq_length, seq_stride, num_generated_features, gen_seq_len)
+    test_ll = load_kdd99('data/kdd99/kdd99_test.npy', seq_length, seq_stride, num_generated_features, gen_seq_len)
+    train_dl = make_kdd99_dl(train_ll, batch_size, deepant)
+    test_dl = make_kdd99_dl(test_ll, batch_size, deepant)
+    return train_dl, test_dl
