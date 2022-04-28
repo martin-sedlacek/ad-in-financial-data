@@ -24,11 +24,15 @@ class FenceGanTrainingPipeline():
         g_loss_total = d_loss_total = 0
 
         for i, (X, Y) in enumerate(train_dl):
+            if X.dim() != 3:
+                X = X.unsqueeze(dim=0)
+
             bs = X.size(0)
 
             # Samples
             real_samples = X.to(DEVICE)
             latent_samples = self.sample_Z(bs, seq_length, latent_dim).to(DEVICE)
+
             fake_samples = G(latent_samples)
 
             # Labels
@@ -39,6 +43,7 @@ class FenceGanTrainingPipeline():
             D_optimizer.zero_grad()
             real_d = D(real_samples)
             fake_d = D(fake_samples.detach())
+
 
             d_loss = D_loss(real_d.view(-1), real_labels.view(-1), fake_d.view(-1), fake_labels.view(-1))
             d_loss.backward()
@@ -64,28 +69,23 @@ class FenceGanTrainingPipeline():
               num_epochs, DEVICE) -> None:
         self.set_seed(random_seed)
 
+        total_em = total_mv = 0
         for train_dl, test_dl in tscv_dl_list:
             for epoch in range(num_epochs):
                 self.train_epoch(D, G, D_loss, G_loss, train_dl, G_optim, D_optim, seq_length, latent_dim, DEVICE, epoch=epoch)
-            total_em = total_mv = 0
+
+            tmp_em = tmp_mv = 0
             for X, Y in test_dl:
                 em, mv = self.emmv(D, X.to(DEVICE), DEVICE=DEVICE)
-                total_em += em
-                total_mv += mv
-            print("EMMV evaluation:")
-            print(total_em / len(test_dl), total_mv / len(test_dl))
+                tmp_em += em
+                tmp_mv += mv
+            print("EM: {0}, MV: {1}".format(tmp_em / len(test_dl), tmp_mv / len(test_dl)))
+            total_em += tmp_em / len(test_dl)
+            total_mv += tmp_mv / len(test_dl)
+        print('Final results - EM: {0} MV: {1}'.format(total_em / len(tscv_dl_list), total_mv / len(tscv_dl_list)))
 
-    def train_kdd99(self, seq_length, latent_dim, train_dl_normal, train_dl_anomaly, test_dl_anomaly, test_dl_normal,
-            D, G, D_optim, G_optim, D_loss, G_loss, random_seed, num_epochs, DEVICE) -> None:
-        self.set_seed(random_seed)
-        for epoch in range(num_epochs):
-            self.train_epoch(D, G, D_loss, G_loss, train_dl_normal, G_optim, D_optim, seq_length, latent_dim, DEVICE, epoch=epoch)
-            self.train_epoch(D, G, D_loss, G_loss, train_dl_anomaly, G_optim, D_optim, seq_length, latent_dim, DEVICE, epoch=epoch, normal_label=1)
-        self.evaluate(D, test_dl_anomaly, 1, DEVICE)
-        self.evaluate(D, test_dl_normal, 0, DEVICE)
 
-    def train_kdd99_small(self, seq_length, latent_dim, train_dl, test_dl, D, G, D_optim, G_optim, D_loss, G_loss,
-            random_seed, num_epochs, DEVICE) -> None:
+    def train_kdd99(self, seq_length, latent_dim, train_dl, test_dl, D, G, D_optim, G_optim, D_loss, G_loss, random_seed, num_epochs, DEVICE):
         self.set_seed(random_seed)
         for epoch in range(num_epochs):
             self.train_epoch(D, G, D_loss, G_loss, train_dl, G_optim, D_optim, seq_length, latent_dim, DEVICE, epoch=epoch)
@@ -101,7 +101,7 @@ class FenceGanTrainingPipeline():
         for X, Y in test_dl:
             prediction = (model(X.to(DEVICE)).detach() > 0.5).float()
             real_labels = torch.full((X.size(0), X.size(1), 1), label).float().to(DEVICE)
-            true_positives, true_negatives, false_positives, false_negatives = metric_calc(prediction.squeeze(dim=2), real_labels.squeeze(dim=2), label)
+            true_positives, true_negatives, false_positives, false_negatives = metric_calc(prediction.view(-1, 1), real_labels.view(-1, 1), label)
             total_acc += accuracy(true_positives, true_negatives, Y)
             if (true_positives+false_positives) > 0:
                 total_pre += precision(true_positives, false_positives)
@@ -114,7 +114,7 @@ class FenceGanTrainingPipeline():
         print("EM: {0}, MV: {1}".format(total_em/len(test_dl), total_mv/len(test_dl)))
 
     # ***************************************************************************************
-    # This method is an adaptation inspired by O'leary (2022) under the MIT open license.
+    # This method is an adaptation of the original by O'leary (2022) under the MIT open license.
     # Availability: https://github.com/christian-oleary/emmv
     # Note: the fundamental logic is not changed, but the pytorch implementation and customisation to support the
     # model associated with this training pipeline is novel.

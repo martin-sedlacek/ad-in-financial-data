@@ -3,10 +3,8 @@ import torch.nn.functional as F
 
 
 # ***************************************************************************************
-# The following Fence-GAN architecture was proposed by Ngo C. et al. (2022)
+# The following is a original pytorch implementation of the Fence-GAN architecture proposed by Ngo C. et al. (2022)
 # Availability: https://github.com/phuccuongngo99/Fence_GAN; https://arxiv.org/pdf/1904.01209v1.pdf
-# Note: the following pytorch implementation of the Fence-GAN is novel, but the overall architecture idea
-# was taken from the source code along with some of the hyper-parameter choices.
 # ***************************************************************************************
 
 class Generator(nn.Module):
