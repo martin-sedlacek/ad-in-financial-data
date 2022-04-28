@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import random
 from utils.evaluation import excess_mass, mass_volume, metric_calc, accuracy, precision, recall
+import time
 
 
 class FenceGanTrainingPipeline():
@@ -87,8 +88,11 @@ class FenceGanTrainingPipeline():
 
     def train_kdd99(self, seq_length, latent_dim, train_dl, test_dl, D, G, D_optim, G_optim, D_loss, G_loss, random_seed, num_epochs, DEVICE):
         self.set_seed(random_seed)
+        start = time.time()
         for epoch in range(num_epochs):
             self.train_epoch(D, G, D_loss, G_loss, train_dl, G_optim, D_optim, seq_length, latent_dim, DEVICE, epoch=epoch)
+        end = time.time()
+        print("Training time: {0}".format(end - start))
         self.evaluate(D, test_dl, 1, DEVICE)
 
     '''
@@ -98,8 +102,12 @@ class FenceGanTrainingPipeline():
     def evaluate(self, model, test_dl, label, DEVICE):
         model.eval()
         total_em = total_mv = total_acc = total_pre = total_rec = 0
+        total_time = 0
         for X, Y in test_dl:
+            start = time.time()
             prediction = (model(X.to(DEVICE)).detach() > 0.5).float()
+            end = time.time()
+            total_time += end - start
             real_labels = torch.full((X.size(0), X.size(1), 1), label).float().to(DEVICE)
             true_positives, true_negatives, false_positives, false_negatives = metric_calc(prediction.view(-1, 1), real_labels.view(-1, 1), label)
             total_acc += accuracy(true_positives, true_negatives, Y)
@@ -110,6 +118,7 @@ class FenceGanTrainingPipeline():
             em, mv = self.emmv(model, X.to(DEVICE), DEVICE=DEVICE)
             total_mv += mv
             total_em += em
+        print("Training time: {0}".format(total_time))
         print("Acc: {0}, Pre: {1}, Rec: {2}".format(total_acc/len(test_dl), total_pre/len(test_dl), total_rec/len(test_dl)))
         print("EM: {0}, MV: {1}".format(total_em/len(test_dl), total_mv/len(test_dl)))
 

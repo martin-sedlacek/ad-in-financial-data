@@ -4,6 +4,7 @@ import random
 from models.MADGAN import AnomalyDetector
 from utils.evaluation import excess_mass, mass_volume
 from utils.evaluation import accuracy, precision, recall, metric_calc
+import time
 
 
 class MadGanTrainingPipeline():
@@ -86,9 +87,11 @@ class MadGanTrainingPipeline():
 
     def train_kdd99(self, seq_length, latent_dim, train_dl, test_dl, D, G, D_optim, G_optim, anomaly_threshold, loss_fn, random_seed, num_epochs, DEVICE) -> None:
         self.set_seed(random_seed)
-
+        start = time.time()
         for epoch in range(num_epochs):
             self.train_epoch(G, D, loss_fn, train_dl, G_optim, D_optim, seq_length, latent_dim, DEVICE, epoch=epoch)
+        end = time.time()
+        print("Training time: {0}".format(end - start))
         ad = AnomalyDetector(discriminator=D, generator=G, latent_space_dim=latent_dim, anomaly_threshold=anomaly_threshold, DEVICE=DEVICE)
         self.evaluate(ad, test_dl, label=1, DEVICE=DEVICE)
 
@@ -97,8 +100,12 @@ class MadGanTrainingPipeline():
     '''
     def evaluate(self, model, test_dl, label, DEVICE):
         total_em = total_mv = total_acc = total_pre = total_rec = 0
+        total_time = 0
         for X, Y in test_dl:
+            start = time.time()
             prediction = model.predict(X.to(DEVICE))
+            end = time.time()
+            total_time += end - start
             true_positives, true_negatives, false_positives, false_negatives = metric_calc(prediction.view(-1, 1), Y.view(-1, 1), label)
             total_acc += accuracy(true_positives, true_negatives, Y)
             if (true_positives+false_positives) > 0:
@@ -108,8 +115,10 @@ class MadGanTrainingPipeline():
             em, mv = self.emmv(model, X.to(DEVICE), DEVICE=DEVICE)
             total_mv += mv
             total_em += em
+        print("Training time: {0}".format(total_time))
         print("Acc: {0}, Pre: {1}, Rec: {2}".format(total_acc/len(test_dl), total_pre/len(test_dl), total_rec/len(test_dl)))
         print("EM: {0}, MV: {1}".format(total_em/len(test_dl), total_mv/len(test_dl)))
+
 
     # ***************************************************************************************
     # This method is an adaptation of the original by O'leary (2022) under the MIT open license.

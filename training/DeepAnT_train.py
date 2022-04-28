@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 from utils.evaluation import excess_mass, mass_volume, metric_calc, accuracy, precision, recall
+import time
 
 
 class DeepAntTrainingPipeline():
@@ -55,9 +56,12 @@ class DeepAntTrainingPipeline():
         return float(loss_sum / len(train_dl))
 
     def train_kdd99(self, train_dl, test_dl, model, optimizer, loss, num_epochs, DEVICE):
+        start = time.time()
         for epoch in range(num_epochs):
             epoch_loss = self.train_epoch_kdd99(model, loss, train_dl, optimizer, DEVICE)
             print('Epoch {0} loss: {1}'.format(epoch, epoch_loss))
+        end = time.time()
+        print("Training time: {0}".format(end - start))
         self.evaluate(model, test_dl, 1, DEVICE)
 
     '''
@@ -67,11 +71,15 @@ class DeepAntTrainingPipeline():
     def evaluate(self, model, test_dl, label, DEVICE):
         model.eval()
         total_em = total_mv = total_acc = total_pre = total_rec = 0
+        total_time = 0
         for (X, Y, next_steps, next_labels) in test_dl:
+            start = time.time()
             seq_prediction = model(X.to(DEVICE)).detach()
             if seq_prediction.dim() == 2:
                 seq_prediction = seq_prediction.unsqueeze(dim=1)
             prediction = model.anomaly_detector(seq_prediction, next_steps.to(DEVICE), model.anomaly_threshold)
+            end = time.time()
+            total_time += end - start
             true_positives, true_negatives, false_positives, false_negatives = metric_calc(prediction.view(-1, 1), next_labels.view(-1, 1), label)
             total_acc += accuracy(true_positives, true_negatives, next_labels)
             if (true_positives + false_positives) > 0:
@@ -81,6 +89,7 @@ class DeepAntTrainingPipeline():
             em, mv = self.deepant_emmv(model, X.to(DEVICE), next_steps.to(DEVICE), DEVICE=DEVICE)
             total_mv += mv
             total_em += em
+        print("Prediction time: {0}".format(total_time))
         print("Acc: {0}, Pre: {1}, Rec: {2}".format(total_acc / len(test_dl), total_pre / len(test_dl), total_rec / len(test_dl)))
         print("EM: {0}, MV: {1}".format(total_em / len(test_dl), total_mv / len(test_dl)))
 

@@ -1,11 +1,18 @@
 import torch
 from utils.evaluation import excess_mass, mass_volume, metric_calc, accuracy, precision, recall
 import numpy as np
+import time
 
 
 def train_kdd99(model, train_x, train_y, test_x, test_y):
+    start = time.time()
     model.fit(train_x)
+    end = time.time()
+    print("Training time: {0}".format(end - start))
+    start = time.time()
     prediction = model.predict(test_x)
+    end = time.time()
+    print("Prediction time: {0}".format(end - start))
     true_positives, true_negatives, false_positives, false_negatives = metric_calc(torch.tensor(prediction).unsqueeze(dim=1), torch.tensor(test_y).unsqueeze(dim=1), 1)
     acc = accuracy(true_positives, true_negatives, torch.tensor(test_y).unsqueeze(dim=1))
     pre = precision(true_positives, false_positives) if (true_positives + false_positives) > 0 else 0.0
