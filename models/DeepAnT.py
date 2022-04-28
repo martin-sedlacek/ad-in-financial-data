@@ -60,8 +60,8 @@ class DeepAnT_LSTM(torch.nn.Module):
 
     @staticmethod
     def anomaly_detector(prediction_seq, ground_truth_seq, anm_det_thr):
-        # calculate Euclidean between actual seq and predicted seq
-        dist = torch.absolute(ground_truth_seq - prediction_seq).mean(dim=prediction_seq.dim()-1)
+        # calculate Euclidean distance
+        dist = torch.sqrt(torch.square(ground_truth_seq - prediction_seq)).mean(dim=prediction_seq.dim()-1)
         return (dist > anm_det_thr).to(dtype=torch.float32)
 
 
@@ -92,5 +92,5 @@ class Extended_DeepAnT_LSTM(torch.nn.Module):
     @staticmethod
     def anomaly_detector(prediction_seq, ground_truth_seq, anm_det_thr):
         # calculate Euclidean between actual seq and predicted seq
-        dist = torch.absolute(ground_truth_seq - prediction_seq).mean(dim=prediction_seq.dim()-1)
+        dist = torch.sqrt(torch.square(ground_truth_seq - prediction_seq)).mean(dim=prediction_seq.dim()-1)
         return (dist > anm_det_thr).to(dtype=torch.float32)

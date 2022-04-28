@@ -10,9 +10,9 @@ class DeepAntTrainingPipeline():
     @staticmethod
     def train_epoch(model, loss_fn, train_dl, optimizer, DEVICE):
         loss_sum = 0.0
-        for (X, Y, next_steps, next_labels) in train_dl:
+        for (X, Y) in train_dl:
             X = X.to(device=DEVICE, dtype=torch.float)
-            next_step_seq = next_steps.squeeze().to(device=DEVICE, dtype=torch.float)
+            next_step_seq = Y.squeeze().to(device=DEVICE, dtype=torch.float)
             model.train()
             pred_next = model(X).squeeze().to(device=DEVICE, dtype=torch.float)
             loss = loss_fn(next_step_seq, pred_next)
@@ -30,29 +30,36 @@ class DeepAntTrainingPipeline():
                 print('Epoch {0} loss: {1}'.format(epoch, epoch_loss))
 
             tmp_em = tmp_mv = 0
-            for (X, Y, next_steps, next_labels) in test_dl:
-                em, mv = self.deepant_emmv(model, X.to(DEVICE), next_steps.to(DEVICE), DEVICE=DEVICE)
+            for (X, Y) in test_dl:
+                em, mv = self.deepant_emmv(model, X.to(DEVICE), Y.to(DEVICE), DEVICE=DEVICE)
                 tmp_em += em
                 tmp_mv += mv
-            print("EMMV evaluation:")
-            print(tmp_em / len(test_dl), tmp_mv / len(test_dl))
+            print("EM: {0}, MV: {1}".format(tmp_em / len(test_dl), tmp_mv / len(test_dl)))
             total_em += tmp_em / len(test_dl)
             total_mv += tmp_mv / len(test_dl)
         print('Final results - EM: {0} MV: {1}'.format(total_em/len(tscv_dl_list), total_mv/len(tscv_dl_list)))
 
+    @staticmethod
+    def train_epoch_kdd99(model, loss_fn, train_dl, optimizer, DEVICE):
+        loss_sum = 0.0
+        for (X, Y, next_steps, next_labels) in train_dl:
+            X = X.to(device=DEVICE, dtype=torch.float)
+            next_step_seq = next_steps.squeeze().to(device=DEVICE, dtype=torch.float)
+            model.train()
+            pred_next = model(X).squeeze().to(device=DEVICE, dtype=torch.float)
+            loss = loss_fn(next_step_seq, pred_next)
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+            loss_sum += loss.item()
+        return float(loss_sum / len(train_dl))
+
     def train_kdd99(self, train_dl, test_dl, model, optimizer, loss, num_epochs, DEVICE):
         for epoch in range(num_epochs):
-            epoch_loss = self.train_epoch(model, loss, train_dl, optimizer, DEVICE)
+            epoch_loss = self.train_epoch_kdd99(model, loss, train_dl, optimizer, DEVICE)
             print('Epoch {0} loss: {1}'.format(epoch, epoch_loss))
         self.evaluate(model, test_dl, 1, DEVICE)
 
-    def train_kdd99_full(self, train_dl_normal, train_dl_anomaly, test_dl_normal, test_dl_anomaly, model, optimizer, loss, num_epochs, DEVICE):
-        for epoch in range(num_epochs):
-            epoch_loss = self.train_epoch(model, loss, train_dl_normal, optimizer, DEVICE)
-            epoch_loss += self.train_epoch(model, loss, train_dl_anomaly, optimizer, DEVICE)
-            print('Epoch {0} loss: {1}'.format(epoch, epoch_loss/2))
-        self.evaluate(model, test_dl_anomaly, 1, DEVICE)
-        self.evaluate(model, test_dl_normal, 0, DEVICE)
     '''
     Evaluation
     '''
@@ -61,9 +68,11 @@ class DeepAntTrainingPipeline():
         model.eval()
         total_em = total_mv = total_acc = total_pre = total_rec = 0
         for (X, Y, next_steps, next_labels) in test_dl:
-            seq_prediction = model(X.to(DEVICE)).detach().unsqueeze(dim=1)
+            seq_prediction = model(X.to(DEVICE)).detach()
+            if seq_prediction.dim() == 2:
+                seq_prediction = seq_prediction.unsqueeze(dim=1)
             prediction = model.anomaly_detector(seq_prediction, next_steps.to(DEVICE), model.anomaly_threshold)
-            true_positives, true_negatives, false_positives, false_negatives = metric_calc(prediction, next_labels, label)
+            true_positives, true_negatives, false_positives, false_negatives = metric_calc(prediction.view(-1, 1), next_labels.view(-1, 1), label)
             total_acc += accuracy(true_positives, true_negatives, next_labels)
             if (true_positives + false_positives) > 0:
                 total_pre += precision(true_positives, false_positives)
@@ -76,7 +85,7 @@ class DeepAntTrainingPipeline():
         print("EM: {0}, MV: {1}".format(total_em / len(test_dl), total_mv / len(test_dl)))
 
     # ***************************************************************************************
-    # This method is an adaptation inspired by O'leary (2022) under the MIT open license.
+    # This method is an adaptation of the original by O'leary (2022) under the MIT open license.
     # Availability: https://github.com/christian-oleary/emmv
     # Note: the fundamental logic is not changed, but the pytorch implementation and customisation to support the
     # model associated with this training pipeline is novel.
