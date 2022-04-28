@@ -19,7 +19,7 @@ class MadGanTrainingPipeline():
     '''
     Training
     '''
-    def train_epoch(self, D, G, loss_fn, train_dl, G_optimizer, D_optimizer, seq_length, latent_dim, DEVICE,
+    def train_epoch(self, G, D, loss_fn, train_dl, G_optimizer, D_optimizer, seq_length, latent_dim, DEVICE,
                     normal_label=0, anomaly_label=1, epoch=0):
         G.train()
         D.train()
@@ -65,28 +65,31 @@ class MadGanTrainingPipeline():
         print("Epoch {0}: G_loss: {1}, D_loss_real: {2}, D_loss_fake: {3}".format(epoch, g_loss_total / len(train_dl),
                     d_loss_real_total / len(train_dl), d_loss_fake_total / len(train_dl)))
 
-    def train_financial(self, seq_length, latent_dim, tscv_dl_list, D, G, D_optim, G_optim, loss_fn, random_seed, num_epochs, DEVICE) -> None:
+    def train_financial(self, seq_length, latent_dim, tscv_dl_list, D, G, D_optim, G_optim, anomaly_threshold, loss_fn, random_seed, num_epochs, DEVICE) -> None:
         self.set_seed(random_seed)
 
-        ad = AnomalyDetector(discriminator=D, generator=G, latent_space_dim=latent_dim, anomaly_threshold=0.5, DEVICE=DEVICE)
+        total_em = total_mv = 0
+        ad = AnomalyDetector(discriminator=D, generator=G, latent_space_dim=latent_dim, anomaly_threshold=anomaly_threshold, DEVICE=DEVICE)
         for train_dl, test_dl in tscv_dl_list:
             for epoch in range(num_epochs):
                 self.train_epoch(G, D, loss_fn, train_dl, G_optim, D_optim, seq_length, latent_dim, DEVICE,
                                  normal_label=0, anomaly_label=1, epoch=epoch)
-            total_em = total_mv = 0
+            tmp_em = tmp_mv = 0
             for X, Y in test_dl:
                 em, mv = self.emmv(ad, X.to(DEVICE), DEVICE=DEVICE)
-                total_em += em
-                total_mv += mv
-            print("EMMV evaluation:")
-            print(total_em / len(test_dl), total_mv / len(test_dl))
+                tmp_em += em
+                tmp_mv += mv
+            print("EM: {0}, MV: {1}".format(tmp_em / len(test_dl), tmp_mv / len(test_dl)))
+            total_em += tmp_em / len(test_dl)
+            total_mv += tmp_mv / len(test_dl)
+        print('Final results - EM: {0} MV: {1}'.format(total_em / len(tscv_dl_list), total_mv / len(tscv_dl_list)))
 
-    def train_kdd99(self, seq_length, latent_dim, train_dl, test_dl, D, G, D_optim, G_optim, loss_fn, random_seed, num_epochs, DEVICE) -> None:
+    def train_kdd99(self, seq_length, latent_dim, train_dl, test_dl, D, G, D_optim, G_optim, anomaly_threshold, loss_fn, random_seed, num_epochs, DEVICE) -> None:
         self.set_seed(random_seed)
 
         for epoch in range(num_epochs):
-            self.train_epoch(D, G, loss_fn, train_dl, G_optim, D_optim, seq_length, latent_dim, DEVICE, epoch=epoch)
-        ad = AnomalyDetector(discriminator=D, generator=G, latent_space_dim=latent_dim, anomaly_threshold=0.5, DEVICE=DEVICE)
+            self.train_epoch(G, D, loss_fn, train_dl, G_optim, D_optim, seq_length, latent_dim, DEVICE, epoch=epoch)
+        ad = AnomalyDetector(discriminator=D, generator=G, latent_space_dim=latent_dim, anomaly_threshold=anomaly_threshold, DEVICE=DEVICE)
         self.evaluate(ad, test_dl, label=1, DEVICE=DEVICE)
 
     '''
@@ -96,7 +99,7 @@ class MadGanTrainingPipeline():
         total_em = total_mv = total_acc = total_pre = total_rec = 0
         for X, Y in test_dl:
             prediction = model.predict(X.to(DEVICE))
-            true_positives, true_negatives, false_positives, false_negatives = metric_calc(prediction.squeeze(), Y.squeeze(), label)
+            true_positives, true_negatives, false_positives, false_negatives = metric_calc(prediction.view(-1, 1), Y.view(-1, 1), label)
             total_acc += accuracy(true_positives, true_negatives, Y)
             if (true_positives+false_positives) > 0:
                 total_pre += precision(true_positives, false_positives)
@@ -109,7 +112,7 @@ class MadGanTrainingPipeline():
         print("EM: {0}, MV: {1}".format(total_em/len(test_dl), total_mv/len(test_dl)))
 
     # ***************************************************************************************
-    # This method is an adaptation inspired by O'leary (2022) under the MIT open license.
+    # This method is an adaptation of the original by O'leary (2022) under the MIT open license.
     # Availability: https://github.com/christian-oleary/emmv
     # Note: the fundamental logic is not changed, but the pytorch implementation and customisation to support the
     # model associated with this training pipeline is novel.

@@ -4,7 +4,8 @@ import torch.nn.functional as F
 
 
 # ***************************************************************************************
-# The following MAD-GAN implementation was inspired by the source code from Guillem96 (2022) with varying alterations
+# The following MAD-GAN implementation was inspired by the source code from Guillem96 (2022)
+# contains significant alterations, bug fixes, and support for CUDA computation
 # Availability: https://github.com/Guillem96/madgan-pytorch
 # ***************************************************************************************
 class Generator(nn.Module):
@@ -16,7 +17,7 @@ class Generator(nn.Module):
         self.output_dim = output_dim
 
         self.lstm = nn.LSTM(input_size=self.input_dim, hidden_size=self.hidden_size, num_layers=self.num_layers, dropout=0.2)
-        self.linear = nn.Linear(in_features=self.hidden_units, out_features=self.output_dim)
+        self.linear = nn.Linear(in_features=self.hidden_size, out_features=self.output_dim)
 
         nn.init.trunc_normal_(self.linear.bias)
         nn.init.trunc_normal_(self.linear.weight)
@@ -29,14 +30,14 @@ class Generator(nn.Module):
 class Discriminator(nn.Module):
     def __init__(self, input_dim, hidden_size, num_layers=2):
         super().__init__()
-        self.hidden_units = hidden_size
+        self.hidden_size = hidden_size
         self.input_dim = input_dim
         self.num_layers = num_layers
 
         # batch_first=True,
         # extra_feature
-        self.lstm = nn.LSTM(input_size=self.input_dim, hidden_size=self.hidden_units, num_layers=self.num_layers, dropout=0.2)
-        self.linear = nn.Linear(in_features=self.hidden_units, out_features=1)
+        self.lstm = nn.LSTM(input_size=self.input_dim, hidden_size=self.hidden_size, num_layers=self.num_layers, dropout=0.2)
+        self.linear = nn.Linear(in_features=self.hidden_size, out_features=1)
         self.activation = nn.Sigmoid()
 
         nn.init.trunc_normal_(self.linear.bias)
@@ -80,7 +81,7 @@ class AnomalyDetector(object):
 
     def compute_reconstruction_loss(self, tensor):
         best_reconstruct = self._generate_best_reconstruction(tensor)
-        return (best_reconstruct - tensor).abs().sum(dim=(1, 2))
+        return torch.sqrt(torch.square(best_reconstruct - tensor)).mean(dim=2).unsqueeze(dim=2)
 
     def _generate_best_reconstruction(self, tensor: torch.Tensor):
         # The goal of this function is to find the corresponding latent space for the given
