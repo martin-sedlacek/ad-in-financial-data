@@ -70,48 +70,4 @@ def recall(true_positives, false_negatives):
     return true_positives / (true_positives+false_negatives)
 
 
-'''@torch.no_grad()
-def evaluate(self, G, D, loss_fn, real_dl, seq_length, latent_dim, DEVICE, normal_label: int = 0, anomaly_label: int = 1) -> Dict[str, float]:
-    metric_accum = {
-        "D_loss": 0,
-        "G_acc": 0,
-        "D_acc": 0
-    }
-    batch_count = 0
-    for X, Y in real_dl:
-        bs = X.size(0)
 
-        # Samples
-        real_samples = X.to(DEVICE)
-        latent_samples = self.sample_Z(bs, seq_length, latent_dim).to(DEVICE)
-        fake_samples = G(latent_samples)
-
-        # Labels
-        real_labels = torch.full((bs, seq_length, 1), normal_label).float().to(DEVICE)
-        fake_labels = torch.full((bs, seq_length, 1), anomaly_label).float().to(DEVICE)
-        all_labels = torch.cat([real_labels, fake_labels])
-
-        # Try to classify the real and generated samples
-        real_d = D(real_samples)
-        fake_d = D(fake_samples.detach())
-        all_d = torch.cat([real_d, fake_d]).to(DEVICE)
-
-        # Discriminator tries to identify the true nature of each sample (anomaly or normal)
-        d_real_loss = loss_fn(real_d.view(-1), real_labels.view(-1))
-        d_fake_loss = loss_fn(fake_d.view(-1), fake_labels.view(-1))
-        d_loss = d_real_loss + d_fake_loss
-
-        discriminator_acc = ((all_d > .5) == all_labels).float()
-        discriminator_acc = discriminator_acc.sum().div(2 * bs * seq_length)
-
-        generator_acc = ((fake_d > .5) == real_labels).float()
-        generator_acc = generator_acc.sum().div(bs * seq_length)
-
-        metric_accum["D_loss"] += d_loss.item()
-        metric_accum["D_acc"] += discriminator_acc.item()
-        metric_accum["G_acc"] += generator_acc.item()
-        batch_count += 1
-    for key in metric_accum.keys():
-        metric_accum[key] = metric_accum[key] / batch_count
-    print("Evaluation metrics:", metric_accum)
-    return metric_accum'''
