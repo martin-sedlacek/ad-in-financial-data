@@ -11,16 +11,28 @@ Student name: Martin Sedlacek
 The purpose of this document is to help the reader navigate through the code base submitted with the final report and set-up the environment to train the models discussed. 
 
 ## Navigating the codebase
-Packages:
+
+###Packages
 * *models* -> Implementation of the NN for all models discussed in the report
 * *training* -> customised methods for training pipelines for each model
 * *utils* -> supplementary files for facilitating a seamless one-click training pipeline 
 
-Data folder:
-* *kdd99* -> the raw dataset for kdd99 ion .npy format
-* *financial_data* -> raw data for financial time series in .txt and .csv formats
+###Data
+Due to upload size constraints, only the raw data for experiments on AAPL, AXP, and GM is provided
 
-Experimentation:
+To obtain data for the kdd99 dataset:
+1. Download the zip at https://github.com/LiDan456/MAD-GANs/blob/master/data/data.7z
+2. Extract and copy the two .npy files inside /data/kdd99
+
+To obtain the full stock market data:
+1. Download the full dataset at https://www.kaggle.com/datasets/borismarjanovic/price-volume-data-for-all-us-stocks-etfs
+2. Extract the file and copy the two folder (Stocks & ETFs) inside /data/financial_data. Replace the existing files 
+   inside these folders. 
+   
+Unless you download the full financial dataset, the EDA results shown in the report will not be reproduced. Running the 
+experiments should still work fine. 
+
+###Experimentation
 * Notebooks for running the customisable experiment for each model are provided in the root directory 
 
 ## 1.1 Environment set-up
