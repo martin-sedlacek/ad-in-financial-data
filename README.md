@@ -6,6 +6,8 @@ undergraduate programme.
 
 Student name: Martin Sedlacek
 
+A pdf of the report is provided in the repository - MS-final-report.pdf
+
 # User Manual
 
 The purpose of this document is to help the reader navigate through the code base submitted with the final report and set-up the environment to train the models discussed. 
