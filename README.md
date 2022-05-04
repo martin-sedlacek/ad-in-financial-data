@@ -29,8 +29,9 @@ To obtain the full stock market data:
 2. Extract the file and copy the two folder (Stocks & ETFs) inside /data/financial_data. Replace the existing files 
    inside these folders. 
    
-Unless you download the full financial dataset, the EDA results shown in the report will not be reproduced. Running the 
-experiments should still work fine. 
+Unless you download the full financial dataset, the EDA notebook will not work as the ETF folder is now empty, which
+causes the loader to fail. Running the experiments should still work fine on the financial data.
+For kdd99, the dataset will have to be downloaded.  
 
 ###Experimentation
 * Notebooks for running the customisable experiment for each model are provided in the root directory 

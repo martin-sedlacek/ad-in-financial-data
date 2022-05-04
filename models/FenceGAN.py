@@ -35,8 +35,8 @@ class Discriminator(nn.Module):
 
         self.linear1 = nn.Linear(in_features=self.input_dim, out_features=256)
         self.linear2 = nn.Linear(in_features=256, out_features=128)
-        self.linear3 = nn.Linear(in_features=128, out_features=128)
-        self.linear4 = nn.Linear(in_features=128, out_features=1)
+        self.linear3 = nn.Linear(in_features=128, out_features=64)
+        self.linear4 = nn.Linear(in_features=64, out_features=1)
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
