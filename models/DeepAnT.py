@@ -8,7 +8,9 @@ def anomaly_detector(prediction_seq, ground_truth_seq, anm_det_thr):
 
 
 # ***************************************************************************************
-# The following DeepAnT_CNN implementation was inspired by the source code from Bmonikraj (2020) with alterations
+# The following DeepAnT_CNN implementation was inspired by the source code from Bmonikraj (2020) with alterations.
+# The class was re-written to smoothly integrate to the training pipeline in this project. Note that the LSTM
+# version below was written from scratch. The idea to use LSTM is from the original paper by Munir et. al (2019).
 # Availability: https://github.com/bmonikraj/medium-ds-unsupervised-anomaly-detection-deepant-lstmae
 # ***************************************************************************************
 class DeepAnT_CNN(torch.nn.Module):

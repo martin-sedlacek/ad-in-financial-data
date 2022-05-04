@@ -132,7 +132,7 @@ def evaluate(model, test_dl, label, DEVICE):
 # This method is an adaptation of the original by O'leary (2022) under the MIT open license.
 # Availability: https://github.com/christian-oleary/emmv
 # Note: the fundamental logic is not changed, but the pytorch implementation and customisation to support the
-# model associated with this training pipeline is novel.
+# model associated with this training pipeline is added.
 # ***************************************************************************************
 def emmv(trained_model, x, n_generated=10000, alpha_min=0.9, alpha_max=0.999, t_max=0.9, DEVICE="cpu"):
     # Get limits and volume support.

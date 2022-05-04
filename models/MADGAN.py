@@ -4,8 +4,9 @@ import torch.nn.functional as F
 
 
 # ***************************************************************************************
-# The following MAD-GAN implementation was inspired by the source code from Guillem96 (2022)
-# contains significant alterations, bug fixes, and support for CUDA computation
+# The following MAD-GAN implementation was inspired by the source code from Guillem96 (2022).
+# Contains significant alterations, bug fixes, and support for CUDA computation in the AnomalyDetector class and
+# the generator/discriminator as defined in the relevant notebook.
 # Availability: https://github.com/Guillem96/madgan-pytorch
 # ***************************************************************************************
 class Generator(nn.Module):
@@ -34,8 +35,6 @@ class Discriminator(nn.Module):
         self.input_dim = input_dim
         self.num_layers = num_layers
 
-        # batch_first=True,
-        # extra_feature
         self.lstm = nn.LSTM(input_size=self.input_dim, hidden_size=self.hidden_size, num_layers=self.num_layers, dropout=0.2)
         self.linear = nn.Linear(in_features=self.hidden_size, out_features=1)
         self.activation = nn.Sigmoid()

@@ -1,8 +1,13 @@
 import torch
 from torch import nn
-import torch.nn.functional as F
 
-
+# ***************************************************************************************
+# The following RSRAE implementation was inspired by the source code from Zabłocki (2021)
+# The fundamental layer structure was changed, the code is completely converted from PyTorch lightning to regular torch.
+# A missing normalisation step form the original paper is added. CUDA computation support is added in the notebook.
+# Code for loss functions is also cleaner and defined as functions in the notebook.
+# Availability: https://github.com/marrrcin/rsrlayer-pytorch/
+# ***************************************************************************************
 class RSRLayer(nn.Module):
     def __init__(self, d: int, D: int):
         super().__init__()
@@ -11,7 +16,6 @@ class RSRLayer(nn.Module):
         self.A = nn.Parameter(torch.nn.init.orthogonal_(torch.empty(d, D)))
 
     def forward(self, z):
-        # z is the output from the encoder
         z_hat = self.A @ z.view(z.size(0), self.D, 1)
         return z_hat.squeeze(2)
 
@@ -19,7 +23,6 @@ class RSRLayer(nn.Module):
 class RSRAutoEncoder(nn.Module):
     def __init__(self, input_dim, d, D):
         super().__init__()
-        # Put your encoder network here, remember about the output D-dimension
         self.encoder = nn.Sequential(
             nn.Linear(input_dim, 32),
             nn.LeakyReLU(),
@@ -32,7 +35,6 @@ class RSRAutoEncoder(nn.Module):
 
         self.rsr = RSRLayer(d, D)
 
-        # Put your decoder network here, rembember about the input d-dimension
         self.decoder = nn.Sequential(
             nn.Linear(d, 64),
             nn.LeakyReLU(),
