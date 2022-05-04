@@ -10,6 +10,19 @@ Student name: Martin Sedlacek
 
 The purpose of this document is to help the reader navigate through the code base submitted with the final report and set-up the environment to train the models discussed. 
 
+## Navigating the codebase
+Packages:
+* *models* -> Implementation of the NN for all models discussed in the report
+* *training* -> customised methods for training pipelines for each model
+* *utils* -> supplementary files for facilitating a seamless one-click training pipeline 
+
+Data folder:
+* *kdd99* -> the raw dataset for kdd99 ion .npy format
+* *financial_data* -> raw data for financial time series in .txt and .csv formats
+
+Experimentation:
+* Notebooks for running the customisable experiment for each model are provided in the root directory 
+
 ## 1.1 Environment set-up
 
 Firstly, ensure the latest version of python is installed on your machine.
@@ -18,8 +31,8 @@ Firstly, ensure the latest version of python is installed on your machine.
 for this one specifically. Using venv with pip should also work fine.
    
 
-    conda create --name <ml_in_fin_data>
-    conda activate <ml_in_fin_data>
+    conda create --name market_anomalies
+    conda activate market_anomalies
 
 
 3. Install the following dependencies:
@@ -57,3 +70,4 @@ to restart the notebook.
 
 Notebook are also provided for reproducing the figures for EDA and final evaluation. 
 These just have to be open and run, same as the model notebooks. 
+

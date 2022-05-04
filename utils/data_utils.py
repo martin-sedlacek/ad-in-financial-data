@@ -35,6 +35,7 @@ from os import path, listdir
 *       - data/financial_data/spx.csv
 ***************************************************************************************'''
 
+DIR_PATH = path.dirname(path.realpath(__file__))
 
 def filter_by_time(df, start, end):
     return df.sort_index().loc[start:end]
@@ -53,11 +54,12 @@ def encode_date(df):
 
 
 def load_financial_data():
-    return pd.read_csv("data/financial_data/normalised_result.csv")
+    return pd.read_csv(path.join(DIR_PATH, "../data/financial_data/normalised_result.csv"))
+
 
 
 def load_sentiment_data():
-    df = pd.read_csv("data/financial_data/Combined_News_DJIA.csv", usecols=['Date', 'Label'])
+    df = pd.read_csv(path.join(DIR_PATH, "../data/financial_data/Combined_News_DJIA.csv"), usecols=['Date', 'Label'])
 
     # Set Date as index
     df['Date'] = pd.to_datetime(df['Date'])
@@ -69,7 +71,7 @@ def load_sentiment_data():
 
 
 def load_spx_data(raw=False):
-    df = pd.read_csv("data/financial_data/spx.csv")
+    df = pd.read_csv(path.join(DIR_PATH, "../data/financial_data/spx.csv"))
 
     # Set Date as index
     df['Date'] = pd.to_datetime(df['Date'])
@@ -87,10 +89,11 @@ def load_spx_data(raw=False):
 
 def load_txts(dir_path, ctr=-1, raw=False):
     # Load the data for multiple .txt files
+    dir_path = path.join(DIR_PATH, dir_path)
     ll = []
     csv_paths = [dir_path + x for x in listdir(dir_path) if x.endswith('.txt') and path.getsize(dir_path + x) > 0]
     for file_path in csv_paths:
-        tmp_df = load_stock(file_path, ctr)
+        tmp_df = load_stock(file_path, ctr, True)
         if not ctr < 0:
             ctr += 1
         ll.append(tmp_df)
@@ -112,7 +115,8 @@ def load_txts(dir_path, ctr=-1, raw=False):
     return ctr, df
 
 
-def load_stock(file_path, ticker_code=-1):
+def load_stock(file_path, ticker_code=-1, absolute=False):
+    if not absolute: file_path = path.join(DIR_PATH, '../'+file_path)
     df = pd.read_csv(file_path, usecols=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
     if ticker_code < 0:
         df['Ticker'] = path.basename(file_path).replace('.txt', '')
@@ -127,12 +131,13 @@ def load_financial(raw=False, encode_ticker=True):
     spx = load_spx_data(raw=raw)
 
     if encode_ticker:
+
         c = 0
-        c, stocks = load_txts('data/financial_data/Stocks/', c, raw=raw)
-        c, etfs = load_txts('data/financial_data/ETFs/', c, raw=raw)
+        c, stocks = load_txts('../data/financial_data/Stocks/', c, raw=raw)
+        c, etfs = load_txts('../data/financial_data/ETFs/', c, raw=raw)
     else:
-        _, stocks = load_txts('data/financial_data/Stocks/', raw=raw)
-        _, etfs = load_txts('data/financial_data/ETFs/', raw=raw)
+        _, stocks = load_txts('../data/financial_data/Stocks/', raw=raw)
+        _, etfs = load_txts('../data/financial_data/ETFs/', raw=raw)
 
     # Filter sentiment and spx dataframes by time
     start, end = '2008-09-01', '2016-07-01'
@@ -243,7 +248,7 @@ def load_stock_as_crossvalidated_timeseries(file_path, seq_length, seq_stride, g
 # The load_kdd99 method contains parts inspired by the original code for data load associated with Li et al. (2019)
 # Availability: https://github.com/LiDan456/MAD-GANs; https://arxiv.org/pdf/1901.04997.pdf
 # ***************************************************************************************
-def load_kdd99(file_path, seq_length, seq_step, num_signals, gen_seq_len): #, bs, deepant=False
+def load_kdd99(file_path, seq_length, seq_step, num_signals, gen_seq_len):
     dataset = np.load(file_path)
 
     m, n = dataset.shape
@@ -282,16 +287,6 @@ def load_kdd99(file_path, seq_length, seq_step, num_signals, gen_seq_len): #, bs
             prev_steps[j, :, i] = samples[(j * seq_step):(j * seq_step + seq_length), i]
             next_steps[j, :, i] = samples[(j * seq_step + seq_length):(j * seq_step + seq_length + gen_seq_len), i]
 
-    '''if deepant:
-        ll = [prev_steps, prev_steps_labels, next_steps, next_steps_labels]
-        ll = [torch.tensor(x.astype(np.float32)) for x in ll]
-        ds = data.TensorDataset(ll[0], ll[1], ll[2], ll[3])
-    else:
-        ll = [prev_steps, prev_steps_labels]
-        ll = [torch.tensor(x.astype(np.float32)) for x in ll]
-        ds = data.TensorDataset(ll[0], ll[1])
-
-    return data.DataLoader(ds, shuffle=False, batch_size=bs)'''
     return [prev_steps, prev_steps_labels, next_steps, next_steps_labels]
 
 
@@ -299,20 +294,16 @@ def make_kdd99_dl(ll, bs, deepant=False):
     ll = [torch.tensor(x.astype(np.float32)) for x in ll]
 
     if deepant:
-        #ll = [prev_steps, prev_steps_labels, next_steps, next_steps_labels]
-        #ll = [torch.tensor(x.astype(np.float32)) for x in ll]
         ds = data.TensorDataset(ll[0], ll[1], ll[2], ll[3])
     else:
-        #ll = [prev_steps, prev_steps_labels]
-        #ll = [torch.tensor(x.astype(np.float32)) for x in ll]
         ds = data.TensorDataset(ll[0], ll[1])
 
     return data.DataLoader(ds, shuffle=False, batch_size=bs)
 
 
 def kdd99(seq_length, seq_stride, num_generated_features, gen_seq_len, batch_size, deepant=False):
-    train_ll = load_kdd99('data/kdd99/kdd99_train.npy', seq_length, seq_stride, num_generated_features, gen_seq_len)
-    test_ll = load_kdd99('data/kdd99/kdd99_test.npy', seq_length, seq_stride, num_generated_features, gen_seq_len)
+    train_ll = load_kdd99(path.join(DIR_PATH, '../data/kdd99/kdd99_train.npy'), seq_length, seq_stride, num_generated_features, gen_seq_len)
+    test_ll = load_kdd99(path.join(DIR_PATH, '../data/kdd99/kdd99_test.npy'), seq_length, seq_stride, num_generated_features, gen_seq_len)
     train_dl = make_kdd99_dl(train_ll, batch_size, deepant)
     test_dl = make_kdd99_dl(test_ll, batch_size, deepant)
     return train_dl, test_dl
